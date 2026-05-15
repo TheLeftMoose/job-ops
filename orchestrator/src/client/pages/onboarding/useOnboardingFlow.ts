@@ -704,6 +704,32 @@ export function useOnboardingFlow() {
     }
   }, [getValues, setValue, syncSettingsCache]);
 
+  const baseResumeValue = watch("rxresumeBaseResumeId");
+  const hasRxResumeAccess =
+    rxresumeValidation.valid || Boolean(settings?.rxresumeApiKeyHint);
+
+  const handleConfirmRxresumeTemplate = useCallback(async () => {
+    const selectedResumeId = getValues().rxresumeBaseResumeId;
+    if (!selectedResumeId) {
+      toast.info("Choose a template resume to continue");
+      return null;
+    }
+
+    try {
+      const validation = await validateBaseResume();
+      if (!validation.valid) {
+        toast.error(validation.message || "Base resume validation failed");
+        return null;
+      }
+
+      toast.success("Resume source is ready");
+      return settings ?? null;
+    } catch (error) {
+      showErrorToast(error, "Failed to validate resume");
+      return null;
+    }
+  }, [getValues, settings, validateBaseResume]);
+
   const handlePrimaryAction = useCallback(async () => {
     if (!currentStep) return null;
     if (currentStep === "llm") {
@@ -711,6 +737,9 @@ export function useOnboardingFlow() {
     }
     if (currentStep === "baseresume") {
       if (resumeSetupMode === "rxresume") {
+        if (hasRxResumeAccess && !getValues().rxresumeApiKey.trim()) {
+          return await handleConfirmRxresumeTemplate();
+        }
         return await handleSaveRxresume();
       }
       return await handleSaveBaseResume();
@@ -721,10 +750,13 @@ export function useOnboardingFlow() {
     return null;
   }, [
     currentStep,
+    getValues,
     handleSaveBaseResume,
+    handleConfirmRxresumeTemplate,
     handleSaveLlm,
     handleSaveSearchTerms,
     handleSaveRxresume,
+    hasRxResumeAccess,
     resumeSetupMode,
   ]);
 
@@ -742,7 +774,6 @@ export function useOnboardingFlow() {
     isValidatingBaseResume;
 
   const currentCopy = currentStep ? STEP_COPY[currentStep] : STEP_COPY.llm;
-  const baseResumeValue = watch("rxresumeBaseResumeId");
 
   const primaryLabel =
     currentStep === "llm"
@@ -751,7 +782,7 @@ export function useOnboardingFlow() {
         : "Save connection"
       : currentStep === "baseresume"
         ? resumeSetupMode === "rxresume"
-          ? rxresumeValidation.valid
+          ? hasRxResumeAccess
             ? baseResumeValue
               ? "Recheck Reactive Resume"
               : "Confirm Resume Template"
@@ -810,11 +841,31 @@ export function useOnboardingFlow() {
     handlePrimaryAction,
     handleTemplateResumeChange: (value: string | null) => {
       const currentValue = getValues().rxresumeBaseResumeId;
+      if (currentValue === value) return;
+
       if (currentValue !== value) {
         markSearchTermsStale();
       }
       setBaseResumeId(value);
       setValue("rxresumeBaseResumeId", value);
+
+      void (async () => {
+        try {
+          setIsSaving(true);
+          const nextSettings = await api.updateSettings({
+            pdfRenderer: "rxresume",
+            rxresumeBaseResumeId: value,
+          });
+          syncSettingsCache(nextSettings);
+          await validateBaseResume();
+        } catch (error) {
+          setBaseResumeId(currentValue);
+          setValue("rxresumeBaseResumeId", currentValue);
+          showErrorToast(error, "Failed to save selected resume");
+        } finally {
+          setIsSaving(false);
+        }
+      })();
     },
   };
 }
