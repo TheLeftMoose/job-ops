@@ -129,6 +129,7 @@ export async function runPipeline(config?: {
   workplaceTypes?: Array<"remote" | "hybrid" | "onsite">;
   searchScope?: LocationSearchScope;
   matchStrictness?: LocationMatchStrictness;
+  watchlistSelectedSourceIds?: string[];
 }): Promise<{ message: string }> {
   return fetchApi<{ message: string }>("/pipeline/run", {
     method: "POST",

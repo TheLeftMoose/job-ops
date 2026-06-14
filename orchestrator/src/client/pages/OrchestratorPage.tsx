@@ -31,6 +31,7 @@ import { useOrchestratorFilters } from "./orchestrator/useOrchestratorFilters";
 import { usePipelineControls } from "./orchestrator/usePipelineControls";
 import { usePipelineSources } from "./orchestrator/usePipelineSources";
 import { useScrollToJobItem } from "./orchestrator/useScrollToJobItem";
+import { useWatchlistPipelineSources } from "./orchestrator/useWatchlistPipelineSources";
 import {
   getEnabledSources,
   getJobCounts,
@@ -143,6 +144,13 @@ export const OrchestratorPage: React.FC = () => {
   );
   const { pipelineSources, setPipelineSources, toggleSource } =
     usePipelineSources(enabledSources);
+  const {
+    watchlistSources,
+    selectedWatchlistSourceIds,
+    setSelectedWatchlistSourceIds,
+    toggleWatchlistSource,
+    isLoading: isWatchlistSourcesLoading,
+  } = useWatchlistPipelineSources();
 
   const {
     isRunModeModalOpen,
@@ -159,6 +167,7 @@ export const OrchestratorPage: React.FC = () => {
     setIsPipelineRunning,
     pipelineTerminalEvent,
     pipelineSources,
+    watchlistSelectedSourceIds: selectedWatchlistSourceIds,
     loadJobs,
     navigateWithContext,
   });
@@ -583,6 +592,11 @@ export const OrchestratorPage: React.FC = () => {
         pipelineSources={pipelineSources}
         onToggleSource={toggleSource}
         onSetPipelineSources={setPipelineSources}
+        watchlistSources={watchlistSources}
+        selectedWatchlistSourceIds={selectedWatchlistSourceIds}
+        onToggleWatchlistSource={toggleWatchlistSource}
+        onSetSelectedWatchlistSourceIds={setSelectedWatchlistSourceIds}
+        isWatchlistSourcesLoading={isWatchlistSourcesLoading}
         isPipelineRunning={isPipelineRunning}
         onOpenChange={setIsRunModeModalOpen}
         onModeChange={setRunMode}
