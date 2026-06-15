@@ -1,4 +1,5 @@
 import {
+  Building2,
   Columns3,
   Eye,
   FilePenLine,
@@ -50,6 +51,12 @@ export const NAV_LINKS: NavLink[] = [
     activePaths: ["/tracer-links"],
   },
   { to: "/visa-sponsors", label: "Visa Sponsors", icon: Shield },
+  {
+    to: "/companies",
+    label: "Companies",
+    icon: Building2,
+    activePaths: ["/companies"],
+  },
   { to: "/watchlist", label: "Watchlist", icon: Eye },
   { to: "/settings", label: "Settings", icon: Settings },
 ];

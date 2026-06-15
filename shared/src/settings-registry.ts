@@ -793,6 +793,33 @@ export const settingsRegistry = {
       return value === null || value === undefined ? null : String(value);
     },
   },
+  companyInvestigationEnabled: {
+    kind: "typed" as const,
+    schema: z.boolean(),
+    default: (): boolean => false,
+    parse: parseBitBoolOrNull,
+    serialize: serializeBitBool,
+  },
+  companyInvestigationAutoTrigger: {
+    kind: "typed" as const,
+    schema: z.enum(["manual", "on_import"]),
+    default: (): "manual" | "on_import" => "manual",
+    parse: (raw: string | undefined): "manual" | "on_import" | null => {
+      if (raw === "manual" || raw === "on_import") return raw;
+      return null;
+    },
+    serialize: (value: string | null | undefined): string | null =>
+      value ?? null,
+  },
+  companyInvestigationProviderIds: {
+    kind: "typed" as const,
+    schema: z.array(z.string().trim().min(1).max(100)).max(20),
+    default: (): string[] => [],
+    parse: (raw: string | undefined): string[] | null =>
+      parseJsonArrayOrNull(raw),
+    serialize: (value: string[] | null | undefined): string | null =>
+      value ? JSON.stringify(value) : null,
+  },
 
   // --- Model Variants ---
   modelScorer: {

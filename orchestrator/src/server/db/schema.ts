@@ -964,6 +964,76 @@ export const tracerClickEvents = sqliteTable(
   }),
 );
 
+export const companyProfiles = sqliteTable(
+  "company_profiles",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id")
+      .notNull()
+      .default("tenant_default")
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    userId: text("user_id").references(() => users.id, {
+      onDelete: "cascade",
+    }),
+    employer: text("employer").notNull(),
+    normalizedName: text("normalized_name"),
+    factsJson: text("facts_json", { mode: "json" }),
+    linkedWatchlistSourceIds: text("linked_watchlist_source_ids", {
+      mode: "json",
+    })
+      .notNull()
+      .default("[]"),
+    createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+    updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
+  },
+  (table) => ({
+    tenantUserEmployerUnique: uniqueIndex(
+      "idx_company_profiles_tenant_user_employer_unique",
+    ).on(table.tenantId, sql`coalesce(${table.userId}, '')`, table.employer),
+    tenantUserIndex: index("idx_company_profiles_tenant_user").on(
+      table.tenantId,
+      table.userId,
+    ),
+  }),
+);
+
+export const companyInvestigations = sqliteTable(
+  "company_investigations",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id")
+      .notNull()
+      .default("tenant_default")
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    userId: text("user_id").references(() => users.id, {
+      onDelete: "cascade",
+    }),
+    companyProfileId: text("company_profile_id")
+      .notNull()
+      .references(() => companyProfiles.id, { onDelete: "cascade" }),
+    status: text("status", {
+      enum: ["pending", "running", "complete", "failed", "skipped"],
+    })
+      .notNull()
+      .default("pending"),
+    providerIds: text("provider_ids", { mode: "json" }).notNull().default("[]"),
+    startedAt: text("started_at").notNull().default(sql`(datetime('now'))`),
+    completedAt: text("completed_at"),
+    errorCode: text("error_code"),
+    requestId: text("request_id"),
+    createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+    updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
+  },
+  (table) => ({
+    tenantUserStatusIndex: index(
+      "idx_company_investigations_tenant_user_status",
+    ).on(table.tenantId, table.userId, table.status),
+    profileIndex: index("idx_company_investigations_profile_id").on(
+      table.companyProfileId,
+    ),
+  }),
+);
+
 export type UserRow = typeof users.$inferSelect;
 export type NewUserRow = typeof users.$inferInsert;
 export type TenantRow = typeof tenants.$inferSelect;
@@ -1026,3 +1096,8 @@ export type TracerLinkRow = typeof tracerLinks.$inferSelect;
 export type NewTracerLinkRow = typeof tracerLinks.$inferInsert;
 export type TracerClickEventRow = typeof tracerClickEvents.$inferSelect;
 export type NewTracerClickEventRow = typeof tracerClickEvents.$inferInsert;
+export type CompanyProfileRow = typeof companyProfiles.$inferSelect;
+export type NewCompanyProfileRow = typeof companyProfiles.$inferInsert;
+export type CompanyInvestigationRow = typeof companyInvestigations.$inferSelect;
+export type NewCompanyInvestigationRow =
+  typeof companyInvestigations.$inferInsert;
