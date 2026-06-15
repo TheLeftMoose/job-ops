@@ -278,6 +278,9 @@ export interface AppSettings {
   penalizeMissingSalary: Resolved<boolean>;
   missingSalaryPenalty: Resolved<number>;
   autoSkipScoreThreshold: Resolved<number | null>;
+  companyInvestigationEnabled: Resolved<boolean>;
+  companyInvestigationAutoTrigger: Resolved<"manual" | "on_import">;
+  companyInvestigationProviderIds: Resolved<string[]>;
 
   // Model variants (no own default, fallback to model.value):
   modelScorer: ModelResolved;

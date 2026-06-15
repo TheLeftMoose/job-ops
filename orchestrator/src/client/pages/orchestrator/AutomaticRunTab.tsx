@@ -23,6 +23,7 @@ import type {
   PipelineSearchPreset,
   PipelineSearchPresetConfig,
   UpdatePipelineSearchPresetInput,
+  WatchlistSelectedSource,
 } from "@shared/types";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
@@ -96,6 +97,11 @@ interface AutomaticRunTabProps {
   pipelineSources: JobSource[];
   onToggleSource: (source: JobSource, checked: boolean) => void;
   onSetPipelineSources: (sources: JobSource[]) => void;
+  watchlistSources?: WatchlistSelectedSource[];
+  selectedWatchlistSourceIds?: string[];
+  onToggleWatchlistSource?: (sourceId: string, checked: boolean) => void;
+  onSetSelectedWatchlistSourceIds?: (ids: string[]) => void;
+  isWatchlistSourcesLoading?: boolean;
   isPipelineRunning: boolean;
   onSaveAndRun: (values: AutomaticRunValues) => Promise<void>;
   savedSearches?: PipelineSearchPreset[];
@@ -286,6 +292,11 @@ export const AutomaticRunTab: React.FC<AutomaticRunTabProps> = ({
   pipelineSources,
   onToggleSource,
   onSetPipelineSources,
+  watchlistSources = [],
+  selectedWatchlistSourceIds = [],
+  onToggleWatchlistSource,
+  onSetSelectedWatchlistSourceIds,
+  isWatchlistSourcesLoading = false,
   isPipelineRunning,
   onSaveAndRun,
   savedSearches = [],
@@ -641,8 +652,9 @@ export const AutomaticRunTab: React.FC<AutomaticRunTabProps> = ({
       minSuitabilityScore: values.minSuitabilityScore,
       runBudget: values.runBudget,
       automaticPresetId: selectedPreset,
+      watchlistSelectedSourceIds: [...selectedWatchlistSourceIds],
     }),
-    [pipelineSources, selectedPreset, values],
+    [pipelineSources, selectedPreset, selectedWatchlistSourceIds, values],
   );
 
   const runDisabled =
@@ -694,7 +706,10 @@ export const AutomaticRunTab: React.FC<AutomaticRunTabProps> = ({
         runBudget: values.runBudget,
         presetId: selectedPreset,
       });
-      await onSaveAndRun(values);
+      await onSaveAndRun({
+        ...values,
+        watchlistSelectedSourceIds: [...selectedWatchlistSourceIds],
+      });
     } finally {
       setIsSaving(false);
     }
@@ -727,6 +742,18 @@ export const AutomaticRunTab: React.FC<AutomaticRunTabProps> = ({
     );
     if (nextSources.length > 0) {
       onSetPipelineSources(nextSources);
+    }
+
+    // Restore Watchlist selection if the saved preset captured it (#621).
+    // Filter against the user's currently-saved Watchlist sources so stale
+    // IDs (deleted on the Watchlist page after the preset was saved) don't
+    // resurrect.
+    if (Array.isArray(config.watchlistSelectedSourceIds)) {
+      const availableIds = new Set(watchlistSources.map((source) => source.id));
+      const restored = config.watchlistSelectedSourceIds.filter((id) =>
+        availableIds.has(id),
+      );
+      onSetSelectedWatchlistSourceIds?.(restored);
     }
 
     await onApplySavedSearch?.(preset);
@@ -1310,9 +1337,11 @@ export const AutomaticRunTab: React.FC<AutomaticRunTabProps> = ({
                       className="min-w-0 space-y-1"
                     >
                       <p className="text-sm font-semibold text-foreground">
-                        {selectedSourceRows.length === 0
+                        {selectedSourceRows.length +
+                          selectedWatchlistSourceIds.length ===
+                        0
                           ? "Choose sources for this run"
-                          : `${selectedSourceRows.length} source${selectedSourceRows.length === 1 ? "" : "s"} selected`}
+                          : `${selectedSourceRows.length + selectedWatchlistSourceIds.length} source${selectedSourceRows.length + selectedWatchlistSourceIds.length === 1 ? "" : "s"} selected`}
                       </p>
                     </motion.div>
                     <motion.div
@@ -1321,13 +1350,13 @@ export const AutomaticRunTab: React.FC<AutomaticRunTabProps> = ({
                       className="flex shrink-0 flex-wrap gap-2"
                     >
                       <Badge variant="outline" className="rounded-full">
-                        {selectedSourceRows.length} selected
+                        {selectedSourceRows.length +
+                          selectedWatchlistSourceIds.length}{" "}
+                        selected
                       </Badge>
                       <Badge variant="outline" className="rounded-full">
-                        {
-                          sourceRows.filter((row) => row.status.available)
-                            .length
-                        }{" "}
+                        {sourceRows.filter((row) => row.status.available)
+                          .length + watchlistSources.length}{" "}
                         available
                       </Badge>
                       {unavailableSourceRows.length > 0 ? (
@@ -1506,6 +1535,111 @@ export const AutomaticRunTab: React.FC<AutomaticRunTabProps> = ({
                         </motion.div>
                       </motion.div>
                     ) : null}
+
+                    <motion.div
+                      layout
+                      transition={sourceMotionTransition}
+                      className="space-y-2"
+                    >
+                      <motion.div
+                        layout
+                        transition={sourceMotionTransition}
+                        className="flex items-center justify-between"
+                      >
+                        <motion.p
+                          layout
+                          transition={sourceMotionTransition}
+                          className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground"
+                        >
+                          Watchlist
+                        </motion.p>
+                        {watchlistSources.length > 0 ? (
+                          <Badge
+                            variant="outline"
+                            className="rounded-full text-[10px] font-semibold uppercase tracking-[0.18em]"
+                          >
+                            {selectedWatchlistSourceIds.length} of{" "}
+                            {watchlistSources.length} selected
+                          </Badge>
+                        ) : null}
+                      </motion.div>
+                      {isWatchlistSourcesLoading ? (
+                        <p className="text-xs text-muted-foreground">
+                          Loading Watchlist sources…
+                        </p>
+                      ) : watchlistSources.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                          No Watchlist sources saved yet. Add company career
+                          pages on the{" "}
+                          <a
+                            href="/watchlist"
+                            className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
+                          >
+                            Watchlist page
+                          </a>{" "}
+                          to include them in pipeline runs.
+                        </p>
+                      ) : (
+                        <motion.div
+                          layout
+                          transition={sourceMotionTransition}
+                          className="grid gap-2 md:grid-cols-2"
+                        >
+                          {watchlistSources.map((source) => {
+                            const isSelected =
+                              selectedWatchlistSourceIds.includes(source.id);
+                            return (
+                              <motion.div
+                                key={source.id}
+                                layout
+                                initial={sourceRowInitial}
+                                animate={sourceSectionAnimate}
+                                exit={sourceRowExit}
+                                transition={sourceMotionTransition}
+                              >
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  aria-label={`Watchlist: ${source.label}`}
+                                  aria-pressed={isSelected}
+                                  title={
+                                    isSelected
+                                      ? "Included in this run. Click to exclude."
+                                      : "Click to include in this run."
+                                  }
+                                  onClick={() =>
+                                    onToggleWatchlistSource?.(
+                                      source.id,
+                                      !isSelected,
+                                    )
+                                  }
+                                  className={
+                                    isSelected
+                                      ? "flex h-auto w-full items-start justify-between gap-3 rounded-xl border border-primary/20 bg-primary/10 px-3 py-3 text-left text-foreground transition-colors duration-200 hover:bg-primary/15"
+                                      : "flex h-auto w-full items-start justify-between gap-3 rounded-xl border border-border/60 bg-background/60 px-3 py-3 text-left text-foreground transition-colors duration-200 hover:bg-muted/40"
+                                  }
+                                >
+                                  <span className="min-w-0 space-y-1">
+                                    <span className="block truncate text-sm font-semibold">
+                                      {source.label}
+                                    </span>
+                                    <span className="block text-xs text-muted-foreground">
+                                      {source.sourceType}
+                                    </span>
+                                  </span>
+                                  <Badge
+                                    variant="outline"
+                                    className="shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em]"
+                                  >
+                                    Watchlist
+                                  </Badge>
+                                </Button>
+                              </motion.div>
+                            );
+                          })}
+                        </motion.div>
+                      )}
+                    </motion.div>
                   </motion.div>
                 </AccordionContent>
               </AccordionItem>

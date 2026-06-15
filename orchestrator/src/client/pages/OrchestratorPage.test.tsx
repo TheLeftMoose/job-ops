@@ -43,6 +43,11 @@ vi.mock("../api", () => ({
   skipJob: vi.fn().mockResolvedValue({}),
   markAsApplied: vi.fn().mockResolvedValue({}),
   processJob: vi.fn().mockResolvedValue({}),
+  getWatchlistSources: vi.fn().mockResolvedValue({
+    catalogSources: [],
+    selectedSources: [],
+    availableSourceTypes: [],
+  }),
 }));
 
 vi.mock("sonner", () => ({
@@ -969,6 +974,7 @@ describe("OrchestratorPage", () => {
       workplaceTypes: ["remote", "hybrid", "onsite"],
       searchScope: "selected_only",
       matchStrictness: "exact_only",
+      watchlistSelectedSourceIds: [],
     });
     expect(setIntervalSpy).not.toHaveBeenCalledWith(expect.any(Function), 5000);
 

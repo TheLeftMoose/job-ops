@@ -1077,8 +1077,6 @@ const migrations = [
   `ALTER TABLE pipeline_runs ADD COLUMN config_snapshot TEXT`,
   `ALTER TABLE analytics_install_state ADD COLUMN raw_event_replay_version INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE analytics_install_state ADD COLUMN raw_event_replay_completed_at TEXT`,
-
-  // Backfill: link existing messages into a linear chain (each message's parent = its predecessor)
   `UPDATE job_chat_messages
    SET parent_message_id = (
      SELECT prev.id
@@ -1139,6 +1137,42 @@ const migrations = [
        ORDER BY se.occurred_at DESC, se.id DESC
        LIMIT 1
      ), 'applied') = 'closed'`,
+
+  // Company investigation tables
+  `CREATE TABLE IF NOT EXISTS company_profiles (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL DEFAULT 'tenant_default',
+    user_id TEXT,
+    employer TEXT NOT NULL,
+    normalized_name TEXT,
+    facts_json TEXT,
+    linked_watchlist_source_ids TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_company_profiles_tenant_user_employer_unique ON company_profiles(tenant_id, COALESCE(user_id, ''), employer)`,
+  `CREATE INDEX IF NOT EXISTS idx_company_profiles_tenant_user ON company_profiles(tenant_id, user_id)`,
+  `CREATE TABLE IF NOT EXISTS company_investigations (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL DEFAULT 'tenant_default',
+    user_id TEXT,
+    company_profile_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'running', 'complete', 'failed', 'skipped')),
+    provider_ids TEXT NOT NULL DEFAULT '[]',
+    started_at TEXT NOT NULL DEFAULT (datetime('now')),
+    completed_at TEXT,
+    error_code TEXT,
+    request_id TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (company_profile_id) REFERENCES company_profiles(id) ON DELETE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_company_investigations_tenant_user_status ON company_investigations(tenant_id, user_id, status)`,
+  `CREATE INDEX IF NOT EXISTS idx_company_investigations_profile_id ON company_investigations(company_profile_id)`,
 ];
 
 console.log("🔧 Running database migrations...");

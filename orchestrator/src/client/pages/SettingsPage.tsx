@@ -20,6 +20,7 @@ import {
 } from "@client/lib/rxresume-config";
 import { BackupSettingsSection } from "@client/pages/settings/components/BackupSettingsSection";
 import { ChatSettingsSection } from "@client/pages/settings/components/ChatSettingsSection";
+import { CompanyInvestigationSettingsSection } from "@client/pages/settings/components/CompanyInvestigationSettingsSection";
 import { DangerZoneSection } from "@client/pages/settings/components/DangerZoneSection";
 import { DisplaySettingsSection } from "@client/pages/settings/components/DisplaySettingsSection";
 import { EnvironmentSettingsSection } from "@client/pages/settings/components/EnvironmentSettingsSection";
@@ -111,6 +112,9 @@ const DEFAULT_FORM_VALUES: UpdateSettingsInput = {
   ghostwriterSystemPromptTemplate: "",
   tailoringPromptTemplate: "",
   scoringPromptTemplate: "",
+  companyInvestigationEnabled: null,
+  companyInvestigationAutoTrigger: null,
+  companyInvestigationProviderIds: [],
 };
 
 type LlmProviderValue = LlmProviderId | null;
@@ -137,6 +141,7 @@ type SettingsSectionId =
   | "tracer-links"
   | "environment"
   | "display"
+  | "company-investigation"
   | "backup"
   | "danger-zone";
 
@@ -146,6 +151,7 @@ type SettingsGroupId =
   | "integrations"
   | "workspaces"
   | "display"
+  | "companies"
   | "backups"
   | "danger";
 
@@ -259,6 +265,25 @@ const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
     ],
   },
   {
+    id: "companies",
+    label: "Companies",
+    items: [
+      {
+        id: "company-investigation",
+        label: "Company Investigation",
+        description:
+          "Enable and configure company registry lookups (e.g. Danish CVR).",
+        searchTerms: [
+          "cvr",
+          "company",
+          "registry",
+          "investigation",
+          "employer",
+        ],
+      },
+    ],
+  },
+  {
     id: "backups",
     label: "Backups",
     items: [
@@ -339,6 +364,11 @@ const SECTION_FIELD_MAP: Record<
     "showSponsorInfo",
     "renderMarkdownInJobDescriptions",
     "autoTailorOnManualImport",
+  ],
+  "company-investigation": [
+    "companyInvestigationEnabled",
+    "companyInvestigationAutoTrigger",
+    "companyInvestigationProviderIds",
   ],
   backup: ["backupEnabled", "backupHour", "backupMaxCount"],
   "danger-zone": [],
@@ -442,6 +472,9 @@ const NULL_SETTINGS_PAYLOAD: UpdateSettingsInput = {
   ghostwriterSystemPromptTemplate: null,
   tailoringPromptTemplate: null,
   scoringPromptTemplate: null,
+  companyInvestigationEnabled: null,
+  companyInvestigationAutoTrigger: null,
+  companyInvestigationProviderIds: null,
 };
 
 function getResetSettingsPayload(
@@ -512,6 +545,12 @@ const mapSettingsToForm = (data: AppSettings): UpdateSettingsInput => ({
     data.ghostwriterSystemPromptTemplate.value ?? "",
   tailoringPromptTemplate: data.tailoringPromptTemplate.value ?? "",
   scoringPromptTemplate: data.scoringPromptTemplate.value ?? "",
+  companyInvestigationEnabled:
+    data.companyInvestigationEnabled.override ?? null,
+  companyInvestigationAutoTrigger:
+    data.companyInvestigationAutoTrigger.override ?? null,
+  companyInvestigationProviderIds:
+    data.companyInvestigationProviderIds.override ?? [],
 });
 
 const normalizeString = (value: string | null | undefined) => {
@@ -764,6 +803,20 @@ const getDerivedSettings = (settings: AppSettings | null) => {
         default: settings?.scoringPromptTemplate?.default ?? "",
       },
     },
+    companyInvestigation: {
+      enabled: {
+        effective: settings?.companyInvestigationEnabled?.value ?? false,
+        default: settings?.companyInvestigationEnabled?.default ?? false,
+      },
+      autoTrigger: {
+        effective: settings?.companyInvestigationAutoTrigger?.value ?? "manual",
+        default: settings?.companyInvestigationAutoTrigger?.default ?? "manual",
+      },
+      providerIds: {
+        effective: settings?.companyInvestigationProviderIds?.value ?? [],
+        default: settings?.companyInvestigationProviderIds?.default ?? [],
+      },
+    },
   };
 };
 
@@ -932,6 +985,7 @@ export const SettingsPage: React.FC = () => {
     backup,
     scoring,
     promptTemplates,
+    companyInvestigation,
   } = derived;
 
   const handleCreateBackup = async () => {
@@ -1269,6 +1323,23 @@ export const SettingsPage: React.FC = () => {
           normalizeString(data.scoringPromptTemplate),
           promptTemplates.scoringPromptTemplate.default,
         ),
+        companyInvestigationEnabled: nullIfSame(
+          data.companyInvestigationEnabled,
+          companyInvestigation.enabled.default,
+        ),
+        companyInvestigationAutoTrigger: nullIfSame(
+          data.companyInvestigationAutoTrigger,
+          companyInvestigation.autoTrigger.default,
+        ),
+        companyInvestigationProviderIds: (() => {
+          const ids = normalizeStringArray(
+            data.companyInvestigationProviderIds,
+          );
+          const defaultIds = normalizeStringArray(
+            companyInvestigation.providerIds.default,
+          );
+          return stringArraysEqual(ids, defaultIds) ? null : ids;
+        })(),
         ...envPayload,
       };
 
@@ -1674,6 +1745,16 @@ export const SettingsPage: React.FC = () => {
       activeSectionContent = (
         <DisplaySettingsSection
           values={display}
+          isLoading={isLoading}
+          isSaving={isSaving}
+          layoutMode="panel"
+        />
+      );
+      break;
+    case "company-investigation":
+      activeSectionContent = (
+        <CompanyInvestigationSettingsSection
+          values={companyInvestigation}
           isLoading={isLoading}
           isSaving={isSaving}
           layoutMode="panel"

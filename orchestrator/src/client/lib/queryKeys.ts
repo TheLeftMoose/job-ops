@@ -73,6 +73,13 @@ export const queryKeys = {
     results: () => [...queryKeys.watchlist.all, "results"] as const,
     states: () => [...queryKeys.watchlist.all, "states"] as const,
   },
+  companies: {
+    all: ["companies"] as const,
+    list: () => [...queryKeys.companies.all, "list"] as const,
+    detail: (id: string) => [...queryKeys.companies.all, "detail", id] as const,
+    watchlists: (id: string) =>
+      [...queryKeys.companies.all, "watchlists", id] as const,
+  },
   visaSponsors: {
     all: ["visa-sponsors"] as const,
     status: () => [...queryKeys.visaSponsors.all, "status"] as const,

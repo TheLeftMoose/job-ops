@@ -70,3 +70,9 @@ export type PromptTemplatesValues = {
   tailoringPromptTemplate: EffectiveDefault<string>;
   scoringPromptTemplate: EffectiveDefault<string>;
 };
+
+export type CompanyInvestigationValues = {
+  enabled: EffectiveDefault<boolean>;
+  autoTrigger: EffectiveDefault<"manual" | "on_import">;
+  providerIds: EffectiveDefault<string[]>;
+};
