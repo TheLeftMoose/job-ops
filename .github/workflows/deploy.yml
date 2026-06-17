@@ -1,0 +1,96 @@
+name: deploy
+
+# Fork-only deploy workflow. Lives on the `infra` branch so it never leaks into
+# upstream contribution PRs (which are cut from `upstream/main`).
+#
+# Triggers an Azure Container Apps revision update against the fork's deployed
+# stack using the GHCR image tag of your choice. Authenticates via GitHub OIDC
+# bound to a User Assigned Managed Identity (see deploy/github-oidc.tf).
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "GHCR image tag to deploy (e.g. edge, sha-abcdef, v1.2.3)"
+        type: string
+        default: edge
+        required: true
+      revision_suffix:
+        description: "Optional revision suffix. Leave empty for auto. Bump (e.g. timestamp) to force re-pull of KV-backed secrets."
+        type: string
+        default: ""
+        required: false
+
+# Fork guard: this workflow does nothing useful in any other repo, and we never
+# want it to run if the file ever ends up somewhere it shouldn't.
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.repository == 'TheLeftMoose/job-ops'
+    runs-on: ubuntu-latest
+    environment: prod
+    env:
+      RESOURCE_GROUP: rg-jobops-prod
+      CONTAINER_APP: ca-jobops-prod
+      IMAGE_REPO: ghcr.io/theleftmoose/job-ops
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve image reference
+        id: img
+        run: |
+          IMAGE="${IMAGE_REPO}:${{ inputs.image_tag }}"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "Deploying image: ${IMAGE}"
+
+      - name: Update Container App revision
+        run: |
+          set -euo pipefail
+          ARGS=(
+            --name "${CONTAINER_APP}"
+            --resource-group "${RESOURCE_GROUP}"
+            --image "${{ steps.img.outputs.image }}"
+          )
+          if [[ -n "${{ inputs.revision_suffix }}" ]]; then
+            ARGS+=( --revision-suffix "${{ inputs.revision_suffix }}" )
+          fi
+          az containerapp update "${ARGS[@]}"
+
+      - name: Show active revision
+        run: |
+          az containerapp revision list \
+            --name "${CONTAINER_APP}" \
+            --resource-group "${RESOURCE_GROUP}" \
+            --query "[?properties.active].{name:name, image:properties.template.containers[0].image, traffic:properties.trafficWeight, createdTime:properties.createdTime}" \
+            -o table
+
+      - name: Smoke test (HTTP 200 on /)
+        run: |
+          set -euo pipefail
+          FQDN=$(az containerapp show \
+            --name "${CONTAINER_APP}" \
+            --resource-group "${RESOURCE_GROUP}" \
+            --query "properties.configuration.ingress.fqdn" -o tsv)
+          echo "FQDN: https://${FQDN}"
+          for i in 1 2 3 4 5; do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://${FQDN}/" || echo "000")
+            echo "Attempt $i: HTTP ${CODE}"
+            if [[ "${CODE}" == "200" ]]; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Smoke test failed: did not see HTTP 200 within 5 attempts"
+          exit 1
