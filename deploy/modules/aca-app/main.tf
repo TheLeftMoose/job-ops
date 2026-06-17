@@ -194,3 +194,7 @@ output "fqdn" {
 output "name" {
   value = azurerm_container_app.main.name
 }
+
+output "id" {
+  value = azurerm_container_app.main.id
+}

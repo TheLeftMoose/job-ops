@@ -47,8 +47,8 @@ variable "codex_share_quota_gb" {
 
 variable "revision_suffix" {
   type        = string
-  default     = "rot202606151526"
-  description = "Container App revision suffix. Bump to force a new revision (needed to re-pull rotated Key Vault secrets)."
+  default     = ""
+  description = "Container App revision suffix. Leave empty to let ACA auto-generate revision names. Set (e.g. to a timestamp) when forcing a new revision is required for image re-pull or KV-backed secret rotation."
 }
 
 variable "kv_admin_ip_cidrs" {
