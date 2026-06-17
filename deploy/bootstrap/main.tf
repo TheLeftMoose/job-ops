@@ -109,6 +109,34 @@ resource "azurerm_storage_container" "tfstate" {
   depends_on            = [time_sleep.wait_rbac]
 }
 
+# Ship blob data-plane logs (incl. denied requests with CallerIpAddress) to the
+# main stack's Log Analytics workspace. Used to discover the real egress IP
+# when the apparent IP differs from what the SA firewall sees (corpnet/VPN
+# split-routing). The LAW is created by the main stack; we look it up by
+# resource ID so this stack stays standalone.
+variable "diagnostics_law_id" {
+  type        = string
+  default     = ""
+  description = "Resource ID of a Log Analytics workspace to send blob logs to. Empty disables logging."
+}
+
+resource "azurerm_monitor_diagnostic_setting" "tfstate_blob" {
+  count                      = var.diagnostics_law_id == "" ? 0 : 1
+  name                       = "diag-tfstate-blob-to-law"
+  target_resource_id         = "${azurerm_storage_account.tfstate.id}/blobServices/default"
+  log_analytics_workspace_id = var.diagnostics_law_id
+
+  enabled_log {
+    category = "StorageRead"
+  }
+  enabled_log {
+    category = "StorageWrite"
+  }
+  enabled_log {
+    category = "StorageDelete"
+  }
+}
+
 output "resource_group_name" {
   value = azurerm_resource_group.tfstate.name
 }

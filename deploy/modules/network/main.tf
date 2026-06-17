@@ -23,6 +23,12 @@ resource "azurerm_subnet" "aca" {
   virtual_network_name = azurerm_virtual_network.main.name
   address_prefixes     = ["10.50.0.0/27"]
 
+  # Azure is retiring the implicit default outbound access; pin to false so
+  # subnet egress is explicit (via the AzureLoadBalancer / NAT / app-managed
+  # outbound). Provider default is still true; without this pin Terraform
+  # would try to re-enable the deprecated path on every plan.
+  default_outbound_access_enabled = false
+
   delegation {
     name = "aca-delegation"
     service_delegation {
@@ -38,6 +44,7 @@ resource "azurerm_subnet" "pe" {
   virtual_network_name              = azurerm_virtual_network.main.name
   address_prefixes                  = ["10.50.0.64/28"]
   private_endpoint_network_policies = "Disabled"
+  default_outbound_access_enabled   = false
 }
 
 # Policy #8: every subnet should have an NSG. Default platform rules are enough
