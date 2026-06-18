@@ -42,7 +42,13 @@ variable "prefix" {
 variable "tfstate_admin_ip_cidrs" {
   type        = list(string)
   default     = []
-  description = "Public IP CIDRs allowed through the tfstate SA firewall for operator/CI state ops."
+  description = "Public IP CIDRs allowed through the tfstate SA firewall. Ignored when tfstate_public_network_unrestricted=true."
+}
+
+variable "tfstate_public_network_unrestricted" {
+  type        = bool
+  default     = false
+  description = "If true, drops the tfstate SA IP firewall (default_action=Allow). Required for GitHub-hosted CI runners whose egress IPs change frequently. Safety remains: shared_access_key_enabled=false + AAD-only auth means only RBAC-granted principals in this tenant can read/write state."
 }
 
 resource "random_string" "sa_suffix" {
@@ -77,12 +83,14 @@ resource "azurerm_storage_account" "tfstate" {
   }
 
   # Closes the Defender "Storage accounts should restrict network access" finding
-  # without an exemption: public path is firewalled to operator/CI CIDRs only,
-  # and AAD-only auth (shared_access_key_enabled=false) remains in effect.
+  # without an exemption when an IP allowlist is provided. Set
+  # tfstate_public_network_unrestricted=true to drop the firewall entirely
+  # (required for GitHub-hosted runners); AAD-only auth still gates the data
+  # plane in that mode.
   network_rules {
-    default_action = "Deny"
+    default_action = var.tfstate_public_network_unrestricted ? "Allow" : "Deny"
     bypass         = ["AzureServices"]
-    ip_rules       = var.tfstate_admin_ip_cidrs
+    ip_rules       = var.tfstate_public_network_unrestricted ? [] : var.tfstate_admin_ip_cidrs
   }
 
   tags = {

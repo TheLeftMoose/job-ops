@@ -20,14 +20,19 @@ module "network" {
 }
 
 module "foundation" {
-  source               = "./modules/foundation"
-  name_base            = local.name_base
-  location             = var.location
-  resource_group_name  = azurerm_resource_group.main.name
-  tenant_id            = data.azurerm_client_config.current.tenant_id
-  current_principal_id = data.azurerm_client_config.current.object_id
-  kv_admin_ip_cidrs    = var.kv_admin_ip_cidrs
-  tags                 = local.tags
+  source              = "./modules/foundation"
+  name_base           = local.name_base
+  location            = var.location
+  resource_group_name = azurerm_resource_group.main.name
+  tenant_id           = data.azurerm_client_config.current.tenant_id
+  # Human admins (from tfvars) + the CI deploy UAMI when enabled. Listed
+  # explicitly so KV Admin grants don't depend on who runs `terraform apply`.
+  kv_admin_principal_ids = concat(
+    var.kv_admin_principal_ids,
+    var.github_oidc_enabled ? [azurerm_user_assigned_identity.github_deploy[0].principal_id] : [],
+  )
+  kv_admin_ip_cidrs = var.kv_admin_ip_cidrs
+  tags              = local.tags
 }
 
 module "storage" {

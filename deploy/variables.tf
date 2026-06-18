@@ -57,6 +57,12 @@ variable "kv_admin_ip_cidrs" {
   description = "Public IP CIDRs allowed through the Key Vault firewall for operator/CI access."
 }
 
+variable "kv_admin_principal_ids" {
+  type        = list(string)
+  default     = []
+  description = "Object IDs of human / external principals granted Key Vault Administrator. The deploy UAMI is added automatically when github_oidc_enabled is true."
+}
+
 variable "tags" {
   type = map(string)
   default = {

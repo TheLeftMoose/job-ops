@@ -41,6 +41,18 @@ variable "github_branch" {
   description = "Branch fallback whose runs may assume this identity (used by workflow_dispatch outside an environment)."
 }
 
+variable "tfstate_storage_account_name" {
+  type        = string
+  default     = "stjobopstfstkm3uaz"
+  description = "Name of the bootstrap-managed Storage Account holding terraform.tfstate. Used to scope Blob Data Contributor for the CI deploy UAMI."
+}
+
+variable "tfstate_resource_group_name" {
+  type        = string
+  default     = "rg-jobops-tfstate"
+  description = "Resource group of the tfstate Storage Account."
+}
+
 resource "azurerm_user_assigned_identity" "github_deploy" {
   count               = var.github_oidc_enabled ? 1 : 0
   name                = "uami-${var.prefix}-${var.environment}-gh-deploy"
@@ -75,13 +87,45 @@ resource "azurerm_federated_identity_credential" "gh_branch" {
   subject             = "repo:${var.github_repo_owner}/${var.github_repo_name}:ref:refs/heads/${var.github_branch}"
 }
 
-# Minimum-blast-radius RBAC: Container Apps Contributor on this ACA only.
-# Sufficient for `az containerapp update --image`, revision_suffix bumps, etc.
-# Does NOT grant Key Vault access (revisions inherit secret access via the
-# UAMI bound to the Container App, not via the deployer principal).
-resource "azurerm_role_assignment" "github_deploy_aca" {
+# RBAC: enough for Terraform to plan/apply the full main stack from CI.
+#
+# - Contributor on the resource group: manage RG-scoped resources (ACA, KV mgmt,
+#   storage mgmt, network, etc.). Does NOT include role assignments or KV data
+#   plane.
+# - User Access Administrator on the resource group: TF manages several
+#   role assignments inside the RG (KV admins, ACA UAMI -> KV Secrets User);
+#   re-applying them requires this role. Scoped to the RG only, not subscription.
+# - Storage Blob Data Contributor on the tfstate SA: needed to read/write
+#   the Terraform state blob (the SA is AAD-auth only; shared keys disabled).
+# - Key Vault Administrator is granted via the foundation module by listing
+#   this UAMI's principal id in module.foundation.kv_admin_principal_ids.
+#
+# Deliberately NOT granted: subscription-wide Contributor, Owner on anything,
+# anything outside rg-jobops-prod + the single tfstate SA.
+
+data "azurerm_storage_account" "tfstate" {
+  count               = var.github_oidc_enabled ? 1 : 0
+  name                = var.tfstate_storage_account_name
+  resource_group_name = var.tfstate_resource_group_name
+}
+
+resource "azurerm_role_assignment" "github_deploy_rg_contributor" {
   count                = var.github_oidc_enabled ? 1 : 0
-  scope                = module.aca_app.id
-  role_definition_name = "Container Apps Contributor"
+  scope                = azurerm_resource_group.main.id
+  role_definition_name = "Contributor"
+  principal_id         = azurerm_user_assigned_identity.github_deploy[0].principal_id
+}
+
+resource "azurerm_role_assignment" "github_deploy_rg_uaa" {
+  count                = var.github_oidc_enabled ? 1 : 0
+  scope                = azurerm_resource_group.main.id
+  role_definition_name = "User Access Administrator"
+  principal_id         = azurerm_user_assigned_identity.github_deploy[0].principal_id
+}
+
+resource "azurerm_role_assignment" "github_deploy_tfstate_blob" {
+  count                = var.github_oidc_enabled ? 1 : 0
+  scope                = data.azurerm_storage_account.tfstate[0].id
+  role_definition_name = "Storage Blob Data Contributor"
   principal_id         = azurerm_user_assigned_identity.github_deploy[0].principal_id
 }

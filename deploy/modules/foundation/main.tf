@@ -9,7 +9,10 @@ variable "name_base" { type = string }
 variable "location" { type = string }
 variable "resource_group_name" { type = string }
 variable "tenant_id" { type = string }
-variable "current_principal_id" { type = string }
+variable "kv_admin_principal_ids" {
+  type        = list(string)
+  description = "Object IDs of principals (users + CI managed identities) granted Key Vault Administrator on this vault. Order-independent; duplicates de-duped."
+}
 variable "tags" { type = map(string) }
 variable "kv_admin_ip_cidrs" {
   type        = list(string)
@@ -77,11 +80,15 @@ resource "azurerm_monitor_diagnostic_setting" "kv" {
   }
 }
 
-# Let the deploying user manage secrets in this KV.
-resource "azurerm_role_assignment" "kv_admin_current" {
+# Grant KV Administrator to every principal in the admin list. Stable across
+# operators: both the human admin(s) and the CI deploy identity are listed
+# explicitly in root tfvars, so applies from either side don't thrash the
+# role assignments.
+resource "azurerm_role_assignment" "kv_admins" {
+  for_each             = toset(var.kv_admin_principal_ids)
   scope                = azurerm_key_vault.main.id
   role_definition_name = "Key Vault Administrator"
-  principal_id         = var.current_principal_id
+  principal_id         = each.value
 }
 
 # Let the UAMI used by the Container App read secrets.
@@ -117,7 +124,7 @@ resource "azurerm_key_vault_secret" "managed" {
     ignore_changes = [value, content_type, tags]
   }
 
-  depends_on = [azurerm_role_assignment.kv_admin_current]
+  depends_on = [azurerm_role_assignment.kv_admins]
 }
 
 output "log_analytics_workspace_id" {

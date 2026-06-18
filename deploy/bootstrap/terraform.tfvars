@@ -1,17 +1,11 @@
 # Operator overrides for bootstrap. Committed on the `infra` branch (single-operator setup).
 
-# Public IP CIDR(s) allowed through the tfstate SA firewall for terraform/az ops.
-#
-# - 167.220.0.0/16 : Microsoft corpnet (used when AzVPN is off / split-tunnel
-#   sends storage traffic via WiFi).
-# - 40.69.0.0/16, 52.164.0.0/16 : Azure North Europe SNAT pools used by the
-#   MSFT-AzVPN client when tunneling Azure-bound traffic. Discovered via
-#   StorageBlobLogs.CallerIpAddress; see deploy/README.md.
-tfstate_admin_ip_cidrs = [
-  "167.220.0.0/16",
-  "40.69.0.0/16",
-  "52.164.0.0/16",
-]
+# Drop the tfstate SA firewall entirely. CI runs Terraform from GitHub-hosted
+# runners whose egress IPs are unstable. AAD-only auth (no shared keys) still
+# gates the data plane: only principals with explicit Blob Data RBAC in this
+# tenant can read/write state. See deploy/README.md for the threat-model
+# write-up.
+tfstate_public_network_unrestricted = true
 
 
 # Log Analytics workspace ID for blob diagnostics. Used to discover the real
