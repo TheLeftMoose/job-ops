@@ -1,28 +1,46 @@
 name: deploy
 
-# Fork-only deploy workflow. Lives on the `infra` branch so it never leaks into
-# upstream contribution PRs (which are cut from `upstream/main`).
+# Fork-only Terraform-driven deploy workflow.
 #
-# Triggers an Azure Container Apps revision update against the fork's deployed
-# stack using the GHCR image tag of your choice. Authenticates via GitHub OIDC
-# bound to a User Assigned Managed Identity (see deploy/github-oidc.tf).
+# Single source of truth = `terraform apply` against the deploy/ stack on the
+# `infra` branch of TheLeftMoose/job-ops. No `az` mutations; nothing drifts
+# behind Terraform's back.
+#
+# UX:
+#   action       = plan (default) | apply
+#   image_tag    = GHCR tag (default :edge) -> -var image=ghcr.io/.../job-ops:<tag>
+#   revision_suffix = optional -> -var revision_suffix=<value> (force re-pull
+#                  of KV-backed secrets after rotation)
+#   ref          = git ref of deploy/ to use (default: infra)
+#
+# Apply runs in the `prod` GitHub Environment, which is configured with a
+# required reviewer. Plan runs without environment gating.
 
 on:
   workflow_dispatch:
     inputs:
+      action:
+        description: "plan or apply"
+        type: choice
+        options: [plan, apply]
+        default: plan
+        required: true
       image_tag:
-        description: "GHCR image tag to deploy (e.g. edge, sha-abcdef, v1.2.3)"
+        description: "GHCR image tag (e.g. edge, sha-abc1234, v1.2.3)"
         type: string
         default: edge
         required: true
       revision_suffix:
-        description: "Optional revision suffix. Leave empty for auto. Bump (e.g. timestamp) to force re-pull of KV-backed secrets."
+        description: "Optional revision suffix. Bump (e.g. timestamp) to force re-pull of KV-backed secrets."
         type: string
         default: ""
         required: false
+      ref:
+        description: "Branch / tag / SHA of the deploy/ stack to apply"
+        type: string
+        default: infra
+        required: true
 
-# Fork guard: this workflow does nothing useful in any other repo, and we never
-# want it to run if the file ever ends up somewhere it shouldn't.
 permissions:
   id-token: write
   contents: read
@@ -31,16 +49,27 @@ concurrency:
   group: deploy-prod
   cancel-in-progress: false
 
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "0"
+  IMAGE_REPO: ghcr.io/theleftmoose/job-ops
+
 jobs:
-  deploy:
+  # ---------------------------------------------------------------------------
+  # plan: always runs. Surfaces the diff in the run log + step summary so the
+  # apply-gate reviewer has something to actually review.
+  # ---------------------------------------------------------------------------
+  plan:
     if: github.repository == 'TheLeftMoose/job-ops'
     runs-on: ubuntu-latest
-    environment: prod
-    env:
-      RESOURCE_GROUP: rg-jobops-prod
-      CONTAINER_APP: ca-jobops-prod
-      IMAGE_REPO: ghcr.io/theleftmoose/job-ops
+    outputs:
+      plan_has_changes: ${{ steps.plan.outputs.has_changes }}
     steps:
+      - name: Checkout deploy stack
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
       - name: Azure login (OIDC)
         uses: azure/login@v2
         with:
@@ -48,49 +77,129 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Resolve image reference
-        id: img
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+          terraform_wrapper: false
+
+      - name: Terraform init
+        working-directory: deploy
+        env:
+          ARM_USE_OIDC: "true"
+          ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        run: terraform init -input=false
+
+      - name: Terraform plan
+        id: plan
+        working-directory: deploy
+        env:
+          ARM_USE_OIDC: "true"
+          ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
         run: |
+          set -euo pipefail
           IMAGE="${IMAGE_REPO}:${{ inputs.image_tag }}"
-          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "Deploying image: ${IMAGE}"
-
-      - name: Update Container App revision
-        run: |
-          set -euo pipefail
-          ARGS=(
-            --name "${CONTAINER_APP}"
-            --resource-group "${RESOURCE_GROUP}"
-            --image "${{ steps.img.outputs.image }}"
-          )
+          ARGS=(-input=false -lock-timeout=5m -out=tfplan -var "image=${IMAGE}")
           if [[ -n "${{ inputs.revision_suffix }}" ]]; then
-            ARGS+=( --revision-suffix "${{ inputs.revision_suffix }}" )
+            ARGS+=(-var "revision_suffix=${{ inputs.revision_suffix }}")
           fi
-          az containerapp update "${ARGS[@]}"
+          # -detailed-exitcode: 0=no changes, 1=error, 2=changes
+          set +e
+          terraform plan "${ARGS[@]}" -detailed-exitcode
+          rc=$?
+          set -e
+          case "$rc" in
+            0) echo "has_changes=false" >> "$GITHUB_OUTPUT" ;;
+            2) echo "has_changes=true"  >> "$GITHUB_OUTPUT" ;;
+            *) exit "$rc" ;;
+          esac
 
-      - name: Show active revision
-        run: |
-          az containerapp revision list \
-            --name "${CONTAINER_APP}" \
-            --resource-group "${RESOURCE_GROUP}" \
-            --query "[?properties.active].{name:name, image:properties.template.containers[0].image, traffic:properties.trafficWeight, createdTime:properties.createdTime}" \
-            -o table
+          {
+            echo "## Terraform plan"
+            echo ""
+            echo "image: \`${IMAGE}\`"
+            echo "revision_suffix: \`${{ inputs.revision_suffix }}\`"
+            echo "ref: \`${{ inputs.ref }}\`"
+            echo ""
+            echo '```'
+            terraform show -no-color tfplan
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Smoke test (HTTP 200 on /)
-        run: |
-          set -euo pipefail
-          FQDN=$(az containerapp show \
-            --name "${CONTAINER_APP}" \
-            --resource-group "${RESOURCE_GROUP}" \
-            --query "properties.configuration.ingress.fqdn" -o tsv)
-          echo "FQDN: https://${FQDN}"
-          for i in 1 2 3 4 5; do
-            CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://${FQDN}/" || echo "000")
-            echo "Attempt $i: HTTP ${CODE}"
-            if [[ "${CODE}" == "200" ]]; then
-              exit 0
-            fi
-            sleep 10
-          done
-          echo "Smoke test failed: did not see HTTP 200 within 5 attempts"
-          exit 1
+      - name: Upload plan artifact
+        if: inputs.action == 'apply'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: deploy/tfplan
+          retention-days: 1
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # apply: only runs when action=apply. Re-checks out the same ref, re-inits
+  # Terraform, downloads the plan from the previous job, and applies it.
+  #
+  # Re-running plan in the same job would risk applying a different plan than
+  # the reviewer saw (TOCTOU). Uploading the plan artifact and consuming it
+  # here keeps "what was approved" == "what gets applied".
+  # ---------------------------------------------------------------------------
+  apply:
+    if: github.repository == 'TheLeftMoose/job-ops' && inputs.action == 'apply'
+    needs: plan
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - name: Checkout deploy stack
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+          terraform_wrapper: false
+
+      - name: Terraform init
+        working-directory: deploy
+        env:
+          ARM_USE_OIDC: "true"
+          ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        run: terraform init -input=false
+
+      - name: Download plan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+          path: deploy
+
+      - name: Terraform apply
+        working-directory: deploy
+        env:
+          ARM_USE_OIDC: "true"
+          ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        run: terraform apply -input=false -auto-approve -lock-timeout=5m tfplan
+
+      - name: Show outputs
+        working-directory: deploy
+        env:
+          ARM_USE_OIDC: "true"
+          ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        run: terraform output
