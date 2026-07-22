@@ -108,11 +108,54 @@ describe("discoverJobsStep", () => {
     const result = await discoverJobsStep({ mergedConfig: baseConfig });
 
     expect(result.discoveredJobs).toHaveLength(1);
+    expect(getProgress().fanout).toMatchObject({
+      locations: ["United Kingdom"],
+      sources: ["indeed", "linkedin", "ukvisajobs"],
+      total: 3,
+    });
     expect(result.sourceErrors).toEqual([
       "UK Visa Jobs: login failed (sources: ukvisajobs)",
     ]);
     expect(jobspyManifest.run).toHaveBeenCalledWith(
       expect.objectContaining({ selectedSources: ["indeed", "linkedin"] }),
+    );
+  });
+
+  it("overrides persisted extractor limits with the normalized run budget", async () => {
+    const settingsRepo = await import("@server/repositories/settings");
+    const registryModule = await import("@server/extractors/registry");
+    const jobspyManifest = {
+      id: "jobspy",
+      displayName: "JobSpy",
+      providesSources: ["indeed", "linkedin", "glassdoor"],
+      run: vi.fn().mockResolvedValue({ success: true, jobs: [] }),
+    };
+
+    vi.mocked(settingsRepo.getAllSettings).mockResolvedValue({
+      searchTerms: JSON.stringify(["engineer"]),
+      jobspyResultsWanted: "25",
+    } as any);
+    vi.mocked(registryModule.getExtractorRegistry).mockResolvedValue({
+      manifests: new Map([["jobspy", jobspyManifest as any]]),
+      manifestBySource: new Map([
+        ["indeed", jobspyManifest as any],
+        ["linkedin", jobspyManifest as any],
+      ]),
+      availableSources: ["indeed", "linkedin"],
+    } as any);
+
+    await discoverJobsStep({
+      mergedConfig: {
+        ...baseConfig,
+        sources: ["indeed", "linkedin"],
+        runBudget: 50,
+      },
+    });
+
+    expect(jobspyManifest.run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        settings: expect.objectContaining({ jobspyResultsWanted: "150" }),
+      }),
     );
   });
 
@@ -537,6 +580,163 @@ describe("discoverJobsStep", () => {
     expect(result.sourceErrors).toContain(
       "Watchlist Acme: failed to fetch jobs",
     );
+  });
+
+  it("filters watchlist sources to the requested subset (#621)", async () => {
+    const settingsRepo = await import("@server/repositories/settings");
+    const registryModule = await import("@server/extractors/registry");
+    const watchlistResults = await import("@server/watchlist/results");
+    const watchlistStep = await import("./watchlist-jobs");
+
+    const acmeSource = {
+      id: "watchlist-acme",
+      catalogSourceId: null,
+      label: "Acme",
+      careersUrl: "https://acme.example/careers",
+      cxsJobsUrl: null,
+      sourceType: "workday",
+      isCustom: false,
+      sortOrder: 0,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    const beetaSource = {
+      ...acmeSource,
+      id: "watchlist-beeta",
+      label: "Beeta",
+    };
+
+    vi.mocked(settingsRepo.getAllSettings).mockResolvedValue({
+      searchTerms: JSON.stringify(["engineer"]),
+    } as any);
+    vi.mocked(registryModule.getExtractorRegistry).mockResolvedValue({
+      manifests: new Map(),
+      manifestBySource: new Map(),
+      availableSources: [],
+    } as any);
+    vi.mocked(
+      watchlistResults.listHydratedWatchlistSelectedSources,
+    ).mockResolvedValue([acmeSource as any, beetaSource as any]);
+    vi.mocked(watchlistStep.discoverWatchlistJobsForPipeline).mockResolvedValue(
+      {
+        discoveredJobs: [],
+        sourceErrors: [],
+        selectedSourceCount: 1,
+        failedSourceCount: 0,
+        searchFilteredCount: 0,
+      },
+    );
+
+    await runWithRequestContext(
+      { requestId: "test", tenantId: "tenant-a", userId: "user-a" },
+      () =>
+        discoverJobsStep({
+          mergedConfig: {
+            ...baseConfig,
+            sources: [],
+          },
+          watchlistSelectedSourceIds: ["watchlist-beeta"],
+        }),
+    );
+
+    expect(watchlistStep.discoverWatchlistJobsForPipeline).toHaveBeenCalledWith(
+      {
+        selectedSources: [beetaSource],
+        searchTerms: ["engineer"],
+        shouldCancel: undefined,
+      },
+    );
+  });
+
+  it("drops unknown / cross-tenant watchlist source IDs without calling discovery (#621)", async () => {
+    const settingsRepo = await import("@server/repositories/settings");
+    const registryModule = await import("@server/extractors/registry");
+    const watchlistResults = await import("@server/watchlist/results");
+    const watchlistStep = await import("./watchlist-jobs");
+
+    const owned = {
+      id: "watchlist-owned",
+      catalogSourceId: null,
+      label: "Owned",
+      careersUrl: "https://owned.example/careers",
+      cxsJobsUrl: null,
+      sourceType: "workday",
+      isCustom: false,
+      sortOrder: 0,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+
+    vi.mocked(settingsRepo.getAllSettings).mockResolvedValue({
+      searchTerms: JSON.stringify(["engineer"]),
+    } as any);
+    vi.mocked(registryModule.getExtractorRegistry).mockResolvedValue({
+      manifests: new Map(),
+      manifestBySource: new Map(),
+      availableSources: [],
+    } as any);
+    vi.mocked(
+      watchlistResults.listHydratedWatchlistSelectedSources,
+    ).mockResolvedValue([owned as any]);
+
+    await runWithRequestContext(
+      { requestId: "test", tenantId: "tenant-a", userId: "user-a" },
+      () =>
+        discoverJobsStep({
+          mergedConfig: {
+            ...baseConfig,
+            sources: [],
+          },
+          // None of these IDs belong to user-a.
+          watchlistSelectedSourceIds: ["other-tenant-id"],
+        }),
+    );
+
+    // Owned sources were resolved (proves cross-tenant safety re-resolves
+    // via the user-scoped listHydratedWatchlistSelectedSources call), but
+    // the cross-tenant ID was dropped so the watchlist discovery step is
+    // never invoked.
+    expect(
+      watchlistResults.listHydratedWatchlistSelectedSources,
+    ).toHaveBeenCalled();
+    expect(
+      watchlistStep.discoverWatchlistJobsForPipeline,
+    ).not.toHaveBeenCalled();
+  });
+
+  it("disables watchlist discovery when explicitly passed an empty list (#621)", async () => {
+    const settingsRepo = await import("@server/repositories/settings");
+    const registryModule = await import("@server/extractors/registry");
+    const watchlistResults = await import("@server/watchlist/results");
+    const watchlistStep = await import("./watchlist-jobs");
+
+    vi.mocked(settingsRepo.getAllSettings).mockResolvedValue({
+      searchTerms: JSON.stringify(["engineer"]),
+    } as any);
+    vi.mocked(registryModule.getExtractorRegistry).mockResolvedValue({
+      manifests: new Map(),
+      manifestBySource: new Map(),
+      availableSources: [],
+    } as any);
+
+    await runWithRequestContext(
+      { requestId: "test", tenantId: "tenant-a", userId: "user-a" },
+      () =>
+        discoverJobsStep({
+          mergedConfig: {
+            ...baseConfig,
+            sources: [],
+          },
+          watchlistSelectedSourceIds: [],
+        }),
+    );
+
+    expect(
+      watchlistResults.listHydratedWatchlistSelectedSources,
+    ).not.toHaveBeenCalled();
+    expect(
+      watchlistStep.discoverWatchlistJobsForPipeline,
+    ).not.toHaveBeenCalled();
   });
 
   it("drops discovered jobs when employer matches blocked company keywords", async () => {

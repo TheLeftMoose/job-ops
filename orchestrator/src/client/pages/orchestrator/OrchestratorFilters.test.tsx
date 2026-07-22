@@ -65,6 +65,12 @@ const renderFilters = (
       max: null,
     },
     onSalaryFilterChange: vi.fn(),
+    postedWithinDays: null,
+    onPostedWithinChange: vi.fn(),
+    employmentTypes: [],
+    onEmploymentTypesChange: vi.fn(),
+    locationFilter: "",
+    onLocationFilterChange: vi.fn(),
     dateFilter: {
       dimensions: [],
       startDate: null,
@@ -77,6 +83,8 @@ const renderFilters = (
     onSortChange: vi.fn(),
     onResetFilters: vi.fn(),
     filteredCount: 5,
+    isFiltersOpen: true,
+    onFiltersOpenChange: vi.fn(),
     ...overrides,
   };
 
@@ -87,6 +95,36 @@ const renderFilters = (
 };
 
 describe("OrchestratorFilters", () => {
+  it("hides the filter bar by default", () => {
+    renderFilters({ isFiltersOpen: false });
+
+    expect(
+      screen.queryByRole("textbox", { name: /filter by location/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^source/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("toggles the filter bar when the Filters button is clicked", () => {
+    const onFiltersOpenChange = vi.fn();
+    renderFilters({ isFiltersOpen: false, onFiltersOpenChange });
+
+    fireEvent.click(screen.getByRole("button", { name: /^filters/i }));
+    expect(onFiltersOpenChange).toHaveBeenCalledWith(true);
+  });
+
+  it("shows an active filter count on the Filters button when collapsed", () => {
+    renderFilters({
+      isFiltersOpen: false,
+      sponsorFilter: "potential",
+    });
+
+    expect(screen.getByRole("button", { name: /^filters/i })).toHaveTextContent(
+      "1",
+    );
+  });
+
   it("notifies when tabs and command search shortcut are used", () => {
     const { props } = renderFilters();
 
@@ -109,18 +147,21 @@ describe("OrchestratorFilters", () => {
     ).toHaveLength(2);
   });
 
-  it("updates source, sponsor, salary range, and sort from the drawer", async () => {
+  it("updates source, sponsor, and salary range from the filter bar", async () => {
     const { props } = renderFilters();
 
-    fireEvent.click(screen.getByRole("button", { name: /^filters/i }));
-
+    fireEvent.click(screen.getByRole("button", { name: /^source/i }));
     fireEvent.click(await screen.findByRole("button", { name: /linkedin/i }));
     expect(props.onSourceFilterChange).toHaveBeenCalledWith("linkedin");
 
-    fireEvent.click(screen.getByRole("button", { name: "Potential sponsor" }));
+    fireEvent.click(screen.getByRole("button", { name: /^sponsor/i }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Potential sponsor" }),
+    );
     expect(props.onSponsorFilterChange).toHaveBeenCalledWith("potential");
 
-    fireEvent.change(screen.getByLabelText("Minimum"), {
+    fireEvent.click(screen.getByRole("button", { name: /^salary/i }));
+    fireEvent.change(await screen.findByLabelText("Minimum"), {
       target: { value: "65000" },
     });
     expect(props.onSalaryFilterChange).toHaveBeenCalledWith({
@@ -132,15 +173,22 @@ describe("OrchestratorFilters", () => {
     fireEvent.click(
       screen.getByRole("combobox", { name: "Salary range specifier" }),
     );
-    fireEvent.click(await screen.findByText("between"));
+    fireEvent.click(await screen.findByRole("option", { name: "between" }));
     expect(props.onSalaryFilterChange).toHaveBeenCalledWith({
       mode: "between",
       min: null,
       max: null,
     });
+  });
 
-    fireEvent.click(screen.getByRole("combobox", { name: "Sort field" }));
-    fireEvent.click(await screen.findByText("Posted"));
+  it("updates sort field and direction from the sort dropdown", async () => {
+    const { props } = renderFilters();
+
+    fireEvent.click(screen.getByRole("button", { name: /^sort/i }));
+    fireEvent.click(
+      await screen.findByRole("combobox", { name: "Sort field" }),
+    );
+    fireEvent.click(await screen.findByRole("option", { name: "Posted" }));
     expect(props.onSortChange).toHaveBeenCalledWith({
       key: "datePosted",
       direction: "desc",
@@ -155,7 +203,9 @@ describe("OrchestratorFilters", () => {
     });
 
     fireEvent.click(screen.getByRole("combobox", { name: "Sort order" }));
-    fireEvent.click(await screen.findByText("Smallest first"));
+    fireEvent.click(
+      await screen.findByRole("option", { name: "Smallest first" }),
+    );
     expect(props.onSortChange).toHaveBeenCalledWith({
       key: "score",
       direction: "asc",
@@ -170,7 +220,7 @@ describe("OrchestratorFilters", () => {
     });
   });
 
-  it("updates date presets and custom dates from the drawer", async () => {
+  it("updates date presets and custom dates from the dates dropdown", async () => {
     const { props } = renderFilters({
       dateFilter: {
         dimensions: ["applied"],
@@ -180,9 +230,9 @@ describe("OrchestratorFilters", () => {
       },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /^filters/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^dates/i }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Ready" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Ready" }));
     expect(props.onDateFilterChange).toHaveBeenCalledWith({
       dimensions: ["ready", "applied"],
       startDate: "2026-04-01",
@@ -228,11 +278,13 @@ describe("OrchestratorFilters", () => {
   });
 
   it("resets filters and only shows sources present in jobs", async () => {
+    // An active filter is required for the Reset control to be shown.
     const { props } = renderFilters({
       sourcesWithJobs: ["gradcracker", "manual"],
+      sponsorFilter: "potential",
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /^filters/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^source/i }));
 
     expect(
       screen.queryByRole("button", { name: "LinkedIn" }),

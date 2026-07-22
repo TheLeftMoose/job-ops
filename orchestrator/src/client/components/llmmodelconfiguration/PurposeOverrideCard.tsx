@@ -1,4 +1,5 @@
 import * as api from "@client/api";
+import { ClaudeCliSetupHint } from "@client/components/ClaudeCliSetupHint";
 import { CodexAuthPanel } from "@client/components/CodexAuthPanel";
 import { GeminiCliSetupHint } from "@client/components/GeminiCliSetupHint";
 import { getDefaultModelForProvider } from "@shared/settings-registry";
@@ -69,6 +70,8 @@ export default function PurposeOverrideCard({
   const isCodexProvider = providerConfig.normalizedProvider === "codex";
   const isGeminiCliProvider =
     providerConfig.normalizedProvider === "gemini_cli";
+  const isClaudeCliProvider =
+    providerConfig.normalizedProvider === "claude_cli";
   const supportsModelSuggestions =
     supportsLlmModelSuggestions(selectedProvider);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
@@ -106,7 +109,7 @@ export default function PurposeOverrideCard({
       return;
     }
 
-    if (providerConfig.showApiKey && !apiKeyValue.trim() && !hasSavedKey) {
+    if (providerConfig.requiresApiKey && !apiKeyValue.trim() && !hasSavedKey) {
       setAvailableModels([]);
       setModelsError(null);
       setIsLoadingModels(false);
@@ -151,6 +154,7 @@ export default function PurposeOverrideCard({
     apiKeyValue,
     baseUrlValue,
     hasSavedKey,
+    providerConfig.requiresApiKey,
     providerConfig.showApiKey,
     providerConfig.showBaseUrl,
     purpose,
@@ -211,6 +215,9 @@ export default function PurposeOverrideCard({
       {hasProviderOverride && isGeminiCliProvider ? (
         <GeminiCliSetupHint />
       ) : null}
+      {hasProviderOverride && isClaudeCliProvider ? (
+        <ClaudeCliSetupHint />
+      ) : null}
 
       {hasProviderOverride && providerConfig.showBaseUrl ? (
         <SettingsInput
@@ -230,14 +237,20 @@ export default function PurposeOverrideCard({
 
       {hasProviderOverride && providerConfig.showApiKey ? (
         <SettingsInput
-          label="API key"
+          label={
+            providerConfig.requiresApiKey ? "API key" : "API key (optional)"
+          }
           inputProps={{
             name: `${purpose}.apiKey`,
             value: apiKeyValue,
             onChange: (event) => onApiKeyChange(purpose, event.target.value),
           }}
           type="password"
-          placeholder="Paste a purpose key"
+          placeholder={
+            providerConfig.requiresApiKey
+              ? "Paste a purpose key"
+              : "Optional bearer token"
+          }
           disabled={disabled}
           helper={renderKeyHelper(
             providerConfig.keyHelperText,

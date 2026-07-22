@@ -78,7 +78,7 @@ describe("generateTailoring", () => {
       },
     };
 
-    await generateTailoring("Build APIs", profile);
+    await generateTailoring("<p>Build <strong>APIs</strong></p>", profile);
 
     expect(callJsonMock).toHaveBeenCalledTimes(1);
 
@@ -102,6 +102,11 @@ describe("generateTailoring", () => {
     );
     expect(request?.messages?.[0]?.content).toContain(
       'Keep "headline" in the exact original job-title wording from the JD.',
+    );
+    expect(request?.messages?.[0]?.content).toContain("Build APIs");
+    expect(request?.messages?.[0]?.content).not.toContain("<strong>");
+    expect(request?.messages?.[0]?.content).toContain(
+      '"basics":{"name":"Test User"',
     );
   });
 
@@ -133,6 +138,59 @@ describe("generateTailoring", () => {
     );
     expect(request?.messages?.[0]?.content).toContain(
       "Output language for summary and skills: German",
+    );
+  });
+
+  it("uses the detected job description language when configured", async () => {
+    vi.mocked(getWritingStyle).mockResolvedValue({
+      tone: "friendly",
+      formality: "low",
+      constraints: "",
+      doNotUse: "",
+      languageMode: "match-job-description",
+      manualLanguage: "english",
+      summaryMaxWords: null,
+      maxKeywordsPerSkill: null,
+    });
+
+    await generateTailoring(
+      "Wir suchen Erfahrung mit Entwicklung und Verantwortung für APIs.",
+      {
+        basics: {
+          name: "Test User",
+          label: "Engineer",
+        },
+      },
+    );
+
+    const request = callJsonMock.mock.calls.at(-1)?.[0];
+    expect(request?.messages?.[0]?.content).toContain(
+      "Output language for summary and skills: German",
+    );
+  });
+
+  it("falls back to english when job description language detection is weak", async () => {
+    vi.mocked(getWritingStyle).mockResolvedValue({
+      tone: "friendly",
+      formality: "low",
+      constraints: "",
+      doNotUse: "",
+      languageMode: "match-job-description",
+      manualLanguage: "german",
+      summaryMaxWords: null,
+      maxKeywordsPerSkill: null,
+    });
+
+    await generateTailoring("Senior platform role with Kubernetes.", {
+      basics: {
+        name: "Test User",
+        label: "Engineer",
+      },
+    });
+
+    const request = callJsonMock.mock.calls.at(-1)?.[0];
+    expect(request?.messages?.[0]?.content).toContain(
+      "Output language for summary and skills: English",
     );
   });
 

@@ -296,11 +296,16 @@ describe("settingsRegistry helpers", () => {
       expect(settingsRegistry.chatStyleLanguageMode.parse("match-resume")).toBe(
         "match-resume",
       );
+      expect(
+        settingsRegistry.chatStyleLanguageMode.parse("match-job-description"),
+      ).toBe("match-job-description");
       expect(settingsRegistry.chatStyleLanguageMode.parse("auto")).toBeNull();
       expect(settingsRegistry.chatStyleLanguageMode.parse("")).toBeNull();
       expect(
-        settingsRegistry.chatStyleLanguageMode.serialize("match-resume"),
-      ).toBe("match-resume");
+        settingsRegistry.chatStyleLanguageMode.serialize(
+          "match-job-description",
+        ),
+      ).toBe("match-job-description");
       expect(settingsRegistry.chatStyleLanguageMode.serialize(null)).toBeNull();
 
       expect(settingsRegistry.chatStyleManualLanguage.parse("english")).toBe(
@@ -341,14 +346,28 @@ describe("settingsRegistry helpers", () => {
       );
     });
 
+    it("accepts claude_cli including hyphenated alias", () => {
+      expect(settingsRegistry.llmProvider.parse("claude_cli")).toBe(
+        "claude_cli",
+      );
+      expect(settingsRegistry.llmProvider.parse("claude-cli")).toBe(
+        "claude_cli",
+      );
+    });
+
     it("accepts GLM provider aliases", () => {
       expect(settingsRegistry.llmProvider.parse("glm")).toBe("glm");
       expect(settingsRegistry.llmProvider.parse("zhipu-ai")).toBe("glm");
       expect(settingsRegistry.llmProvider.parse("bigmodel")).toBe("glm");
     });
 
+    it("accepts the Claude alias for Anthropic", () => {
+      expect(settingsRegistry.llmProvider.parse("claude")).toBe("anthropic");
+    });
+
     it("uses provider-specific default models", () => {
       expect(getDefaultModelForProvider("openai")).toBe("gpt-5.4-mini");
+      expect(getDefaultModelForProvider("anthropic")).toBe("claude-sonnet-4-6");
       expect(getDefaultModelForProvider("glm")).toBe("glm-5.1");
       expect(getDefaultModelForProvider("gemini")).toBe(
         "google/gemini-3-flash-preview",
@@ -356,7 +375,9 @@ describe("settingsRegistry helpers", () => {
       expect(getDefaultModelForProvider("gemini_cli")).toBe(
         "google/gemini-3-flash-preview",
       );
+      expect(getDefaultModelForProvider("claude_cli")).toBe("claude-sonnet-5");
       expect(getDefaultModelForProvider("codex")).toBe("gpt-5.4-mini");
+      expect(getDefaultModelForProvider("ollama")).toBe("");
       expect(getDefaultModelForProvider("openrouter")).toBe(
         "google/gemini-3-flash-preview",
       );

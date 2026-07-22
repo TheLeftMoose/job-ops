@@ -370,6 +370,91 @@ describe("Model Selection Logic", () => {
       );
     });
 
+    it("uses Anthropic defaults for a purpose-specific provider override", async () => {
+      vi.mocked(settingsRepo.getAllSettings).mockResolvedValue({
+        llmApiKey: "sk-global",
+        llmPurposeApiKeys: JSON.stringify({ tailoring: "sk-ant" }),
+      });
+      vi.mocked(getEffectiveSettings).mockResolvedValue({
+        model: {
+          value: "llama3.2",
+          default: "llama3.2",
+          override: "llama3.2",
+        },
+        modelScorer: { value: "llama3.2", override: null },
+        modelTailoring: { value: "claude-sonnet-4-6", override: null },
+        modelProjectSelection: { value: "llama3.2", override: null },
+        llmProvider: {
+          value: "ollama",
+          default: "ollama",
+          override: "ollama",
+        },
+        llmBaseUrl: {
+          value: "http://localhost:11434",
+          default: "http://localhost:11434",
+          override: null,
+        },
+        llmPurposeOverrides: {
+          value: {
+            tailoring: { provider: "anthropic" },
+          },
+          default: {},
+          override: {
+            tailoring: { provider: "anthropic" },
+          },
+        },
+      } as any);
+
+      await expect(
+        resolveLlmRuntimeSettings("tailoring"),
+      ).resolves.toMatchObject({
+        provider: "anthropic",
+        model: "claude-sonnet-4-6",
+        baseUrl: "https://api.anthropic.com",
+        apiKey: "sk-ant",
+      });
+    });
+
+    it("does not carry stale OpenRouter base URLs into native Anthropic", async () => {
+      vi.mocked(settingsRepo.getAllSettings).mockResolvedValue({
+        llmApiKey: "sk-ant",
+      });
+      vi.mocked(getEffectiveSettings).mockResolvedValue({
+        model: {
+          value: "claude-sonnet-4-6",
+          default: "claude-sonnet-4-6",
+          override: null,
+        },
+        modelScorer: { value: "claude-sonnet-4-6", override: null },
+        modelTailoring: { value: "claude-sonnet-4-6", override: null },
+        modelProjectSelection: { value: "claude-sonnet-4-6", override: null },
+        llmProvider: {
+          value: "anthropic",
+          default: "anthropic",
+          override: "anthropic",
+        },
+        llmBaseUrl: {
+          value: "https://openrouter.ai",
+          default: "https://openrouter.ai",
+          override: "https://openrouter.ai",
+        },
+        llmPurposeOverrides: {
+          value: {},
+          default: {},
+          override: {},
+        },
+      } as any);
+
+      await expect(
+        resolveLlmRuntimeSettings("tailoring"),
+      ).resolves.toMatchObject({
+        provider: "anthropic",
+        model: "claude-sonnet-4-6",
+        baseUrl: "https://api.anthropic.com",
+        apiKey: "sk-ant",
+      });
+    });
+
     it("uses the Codex default model when tailoring uses Codex with no model override", async () => {
       vi.mocked(settingsRepo.getAllSettings).mockResolvedValue({});
       vi.mocked(getEffectiveSettings).mockResolvedValue({
@@ -452,7 +537,7 @@ describe("Model Selection Logic", () => {
       } as any);
 
       await pickProjectIdsForJob({
-        jobDescription: "desc",
+        jobDescription: "<p>desc</p>",
         eligibleProjects: [
           {
             id: "1",
@@ -467,6 +552,10 @@ describe("Model Selection Logic", () => {
       const fetchCall = vi.mocked(fetch).mock.calls[0];
       const body = JSON.parse(fetchCall[1]?.body as string);
       expect(body.model).toBe("specific-project-model");
+      expect(body.messages[0].content).not.toContain("<p>");
+      expect(body.messages[0].content).toContain(
+        'Candidate projects (pick from these IDs only):\n[{"id":"1"',
+      );
     });
 
     it("should fall back to global model when specific not set", async () => {

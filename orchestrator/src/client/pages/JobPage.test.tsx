@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { celebrateOffer } from "@/client/lib/celebrate";
 import { editorHtmlToMarkdown } from "@/client/lib/jobNoteContent";
 import * as privatePdf from "@/client/lib/private-pdf";
 import * as api from "../api";
@@ -119,7 +120,25 @@ vi.mock("../components/JobDetailsEditDrawer", () => ({
 }));
 
 vi.mock("../components/LogEventModal", () => ({
-  LogEventModal: () => null,
+  LogEventModal: ({ isOpen, onLog }: any) =>
+    isOpen ? (
+      <div data-testid="log-event-modal">
+        <button
+          type="button"
+          data-testid="mock-log-submit"
+          onClick={() =>
+            onLog({
+              stage: "offer",
+              title: "Offer Received",
+              date: "2026-06-12",
+              notes: "Got an offer!",
+            })
+          }
+        >
+          Submit Log Event
+        </button>
+      </div>
+    ) : null,
 }));
 
 vi.mock("./job-page/JobPageRightSidebar", () => ({
@@ -160,6 +179,10 @@ vi.mock("./job/Timeline", () => ({
 
 vi.mock("@client/hooks/useQueryErrorToast", () => ({
   useQueryErrorToast: vi.fn(),
+}));
+
+vi.mock("@/client/lib/celebrate", () => ({
+  celebrateOffer: vi.fn(),
 }));
 
 vi.mock("sonner", () => ({
@@ -565,10 +588,39 @@ describe("JobPage back navigation", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /^back$/i }));
 
-    await waitFor(() =>
+    await waitFor(() => {
       expect(screen.getByTestId("location-probe")).toHaveTextContent(
         "/jobs/ready?source=naukri",
-      ),
+      );
+    });
+  });
+
+  it("triggers celebrateOffer when an offer event is logged", async () => {
+    vi.mocked(api.getJob).mockResolvedValue(
+      createJob({ status: "in_progress" }) as Job,
     );
+    vi.mocked(api.transitionJobStage).mockResolvedValue({
+      id: "evt-offer",
+      applicationId: "job-1",
+      title: "Offer Received",
+      groupId: null,
+      fromStage: "applied",
+      toStage: "offer",
+      occurredAt: 1_700_000_000,
+      metadata: null,
+      outcome: null,
+    });
+
+    renderJobPage("/job/job-1");
+
+    const logButton = await screen.findByRole("button", { name: /log event/i });
+    fireEvent.click(logButton);
+
+    const submitButton = await screen.findByTestId("mock-log-submit");
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(celebrateOffer).toHaveBeenCalled();
+    });
   });
 });

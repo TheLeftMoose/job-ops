@@ -12,6 +12,8 @@ export const DEFAULT_PIPELINE_SOURCES: JobSource[] = [
   "ukvisajobs",
 ];
 export const PIPELINE_SOURCES_STORAGE_KEY = "jobops.pipeline.sources";
+export const PIPELINE_WATCHLIST_SOURCES_STORAGE_KEY =
+  "jobops.pipeline.watchlist-sources";
 
 export const orderedSources: JobSource[] = [
   ...PIPELINE_EXTRACTOR_SOURCE_IDS,
@@ -104,6 +106,41 @@ export interface SalaryFilter {
   max: number | null;
 }
 
+export type EmploymentType =
+  | "full_time"
+  | "part_time"
+  | "contract"
+  | "internship"
+  | "temporary";
+
+export const employmentTypeOptions: Array<{
+  value: EmploymentType;
+  label: string;
+}> = [
+  { value: "full_time", label: "Full-time" },
+  { value: "part_time", label: "Part-time" },
+  { value: "contract", label: "Contract" },
+  { value: "internship", label: "Internship" },
+  { value: "temporary", label: "Temporary" },
+];
+
+export const employmentTypeValues: EmploymentType[] = employmentTypeOptions.map(
+  (option) => option.value,
+);
+
+/** Presets for the "posted within the last N days" filter. */
+export const postedWithinOptions: Array<{ value: number; label: string }> = [
+  { value: 1, label: "24 hours" },
+  { value: 3, label: "3 days" },
+  { value: 7, label: "7 days" },
+  { value: 14, label: "14 days" },
+  { value: 30, label: "30 days" },
+];
+
+export const postedWithinValues: number[] = postedWithinOptions.map(
+  (option) => option.value,
+);
+
 export interface JobSort {
   key: SortKey;
   direction: SortDirection;
@@ -114,6 +151,23 @@ export interface JobDateFilter {
   startDate: string | null;
   endDate: string | null;
   preset: DateFilterPreset | null;
+}
+
+/**
+ * Full set of client-side filter inputs applied to the in-memory job list.
+ * Passed as a single object to {@link useFilteredJobs} so new filters can be
+ * added without growing the call signature.
+ */
+export interface JobFilters {
+  activeTab: FilterTab;
+  dateFilter: JobDateFilter;
+  sourceFilter: JobSource | "all";
+  sponsorFilter: SponsorFilter;
+  salaryFilter: SalaryFilter;
+  postedWithinDays: number | null;
+  employmentTypes: EmploymentType[];
+  location: string;
+  sort: JobSort;
 }
 
 export const DEFAULT_SORT: JobSort = { key: "score", direction: "desc" };
@@ -158,10 +212,10 @@ export const tabs: Array<{
 ];
 
 export const emptyStateCopy: Record<FilterTab, string> = {
-  ready: "Run the pipeline to discover and process new jobs.",
+  ready: "Run a search to discover and process new jobs.",
   discovered: "All discovered jobs have been processed.",
   applied: "You have not applied to any jobs yet.",
-  all: "No jobs in the system yet. Run the pipeline to get started.",
+  all: "No jobs in the system yet. Run a search to get started.",
 };
 
 export const dateFilterDimensionLabels: Record<DateFilterDimension, string> = {

@@ -13,6 +13,7 @@ import {
   extractPdfText,
   PdfTextExtractionError,
 } from "@server/services/document-text-extraction";
+import { ClaudeCliClient } from "@server/services/llm/claude-cli/client";
 import { CodexClient } from "@server/services/llm/codex/client";
 import { GeminiCliClient } from "@server/services/llm/gemini-cli/client";
 import type { JsonSchemaDefinition } from "@server/services/llm/types";
@@ -44,6 +45,7 @@ type SupportedRuntimeProvider =
   | "glm"
   | "gemini"
   | "gemini_cli"
+  | "claude_cli"
   | "codex"
   | "openai_compatible"
   | "ollama"
@@ -259,10 +261,23 @@ type ResumeImportFileInput = {
 };
 
 const MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024;
-const OPENAI_DEFAULT_TIMEOUT_MS = 60_000;
-const OPENROUTER_DEFAULT_TIMEOUT_MS = 90_000;
-const GEMINI_DEFAULT_TIMEOUT_MS = 90_000;
-const LOCAL_CHAT_COMPLETIONS_TIMEOUT_MS = 120_000;
+
+function getPositiveIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name]?.trim();
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return parsed;
+}
+
+const OPENAI_DEFAULT_TIMEOUT_MS = () =>
+  getPositiveIntEnv("LLM_IMPORT_OPENAI_TIMEOUT_MS", 60_000);
+const OPENROUTER_DEFAULT_TIMEOUT_MS = () =>
+  getPositiveIntEnv("LLM_IMPORT_OPENROUTER_TIMEOUT_MS", 90_000);
+const GEMINI_DEFAULT_TIMEOUT_MS = () =>
+  getPositiveIntEnv("LLM_IMPORT_GEMINI_TIMEOUT_MS", 90_000);
+const LOCAL_CHAT_COMPLETIONS_TIMEOUT_MS = () =>
+  getPositiveIntEnv("LLM_IMPORT_LOCAL_TIMEOUT_MS", 120_000);
 const CHAT_COMPLETIONS_SUFFIX = "/v1/chat/completions";
 const GLM_CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 const API_VERSION_SUFFIX = "/v1";
@@ -326,6 +341,7 @@ function normalizeRuntimeProvider(
   if (mapped === "glm") return "glm";
   if (mapped === "gemini") return "gemini";
   if (mapped === "gemini_cli") return "gemini_cli";
+  if (mapped === "claude_cli") return "claude_cli";
   if (mapped === "codex") return "codex";
   if (mapped === "openai_compatible") return "openai_compatible";
   if (mapped === "ollama") return "ollama";
@@ -1172,6 +1188,7 @@ async function extractInitialDocumentText(input: {
   if (
     input.mediaType === "application/pdf" &&
     (input.provider === "gemini_cli" ||
+      input.provider === "claude_cli" ||
       isTextOnlyImportProvider(input.provider))
   ) {
     return extractResumePdfText(input.decoded);
@@ -1189,6 +1206,7 @@ function shouldFallbackToExtractedPdfText(input: {
     input.mediaType !== "application/pdf" ||
     input.documentText ||
     input.provider === "gemini_cli" ||
+    input.provider === "claude_cli" ||
     isTextOnlyImportProvider(input.provider)
   ) {
     return false;
@@ -1258,7 +1276,7 @@ async function extractWithOpenAi(args: {
         },
       ],
     }),
-    signal: AbortSignal.timeout(OPENAI_DEFAULT_TIMEOUT_MS),
+    signal: AbortSignal.timeout(OPENAI_DEFAULT_TIMEOUT_MS()),
   });
 
   if (!response.ok) {
@@ -1356,7 +1374,7 @@ async function extractWithOpenRouter(args: {
             }
           : {}),
       }),
-      signal: AbortSignal.timeout(OPENROUTER_DEFAULT_TIMEOUT_MS),
+      signal: AbortSignal.timeout(OPENROUTER_DEFAULT_TIMEOUT_MS()),
     });
 
     if (!response.ok) {
@@ -1454,7 +1472,7 @@ async function extractWithGemini(args: {
         responseMimeType: "application/json",
       },
     }),
-    signal: AbortSignal.timeout(GEMINI_DEFAULT_TIMEOUT_MS),
+    signal: AbortSignal.timeout(GEMINI_DEFAULT_TIMEOUT_MS()),
   });
 
   if (!response.ok) {
@@ -1525,7 +1543,7 @@ async function extractWithTextChatCompletions(args: {
         },
       ],
     }),
-    signal: AbortSignal.timeout(LOCAL_CHAT_COMPLETIONS_TIMEOUT_MS),
+    signal: AbortSignal.timeout(LOCAL_CHAT_COMPLETIONS_TIMEOUT_MS()),
   });
 
   if (!response.ok) {
@@ -1595,6 +1613,54 @@ async function extractWithGeminiCli(args: {
             requestId: args.requestId,
           }
         : { provider: "gemini_cli", model: args.model },
+    );
+  }
+}
+
+async function extractWithClaudeCli(args: {
+  model: string;
+  mediaType: SupportedImportMediaType;
+  fileName: string;
+  documentText: string;
+  requestId: string | undefined;
+}): Promise<string> {
+  const source: "DOCX" | "PDF" =
+    args.mediaType === "application/pdf" ? "PDF" : "DOCX";
+  const userContent = buildTextExtractPrompt(
+    args.documentText,
+    args.fileName,
+    source,
+  );
+  const client = new ClaudeCliClient();
+  try {
+    const { text } = await client.callJson({
+      model: args.model,
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: userContent },
+      ],
+      jsonSchema: DESIGN_RESUME_IMPORT_CLI_JSON_SCHEMA,
+    });
+    if (!text?.trim()) {
+      throw upstreamError(
+        "Claude CLI returned an empty response for resume import.",
+      );
+    }
+    return text;
+  } catch (error) {
+    if (error instanceof AppError) {
+      throw error;
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    throw upstreamError(
+      truncate(message, 500),
+      args.requestId
+        ? {
+            provider: "claude_cli",
+            model: args.model,
+            requestId: args.requestId,
+          }
+        : { provider: "claude_cli", model: args.model },
     );
   }
 }
@@ -1686,6 +1752,21 @@ async function extractResumeFromProvider(args: {
       );
     }
     return extractWithGeminiCli({
+      model: args.model,
+      mediaType: args.mediaType,
+      fileName: args.fileName,
+      documentText: text,
+      requestId: args.requestId,
+    });
+  }
+  if (args.provider === "claude_cli") {
+    const text = args.documentText?.trim();
+    if (!text) {
+      throw badRequest(
+        "Claude CLI resume import requires plain-text resume content (DOCX or extracted PDF text).",
+      );
+    }
+    return extractWithClaudeCli({
       model: args.model,
       mediaType: args.mediaType,
       fileName: args.fileName,

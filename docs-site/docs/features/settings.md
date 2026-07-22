@@ -43,7 +43,7 @@ Settings gives you runtime overrides for the key parts of discovery, scoring, ta
 ![Model settings section](/img/features/settings-model-section.png)
 
 - In hosted deployments with platform-managed LLM enabled, this section is hidden because provider, API key, and model selection are managed by the hosted platform.
-- Choose provider (`openrouter`, `lmstudio`, `ollama`, `openai`, `glm`, `gemini`, `gemini_cli`, `codex`)
+- Choose provider (`openrouter`, `requesty`, `lmstudio`, `ollama`, `openai`, `glm`, `gemini`, `gemini_cli`, `claude_cli`, `codex`)
 - Set provider-specific base URL/API key when required
 - Configure the default model/runtime, plus purpose-specific overrides for:
   - Scoring
@@ -56,11 +56,13 @@ Settings gives you runtime overrides for the key parts of discovery, scoring, ta
   - `codex` defaults to `gpt-5.4-mini`
   - `glm` defaults to `glm-5.1`
   - `gemini` and `gemini_cli` default to `google/gemini-3-flash-preview`
+  - `claude_cli` defaults to `claude-sonnet-5`
 - The settings page shows provider-aware model pickers for:
   - `openai`: available text-generation models only
   - `glm`: available GLM text-generation models from the configured BigModel-compatible endpoint
   - `gemini`: available Gemini text-generation models only
   - `gemini_cli`: a curated list of Gemini model ids the CLI typically supports (install [Gemini CLI](https://www.npmjs.com/package/@google/gemini-cli), run `gemini` and complete Google sign-in, or set `GEMINI_API_KEY` for the CLI; JobOps spawns headless `gemini -p ...` with `--approval-mode plan` and no JobOps API key field). **Resume import** uses the CLI with extracted text: DOCX is parsed locally; PDF uses local text extraction then JSON extraction via the CLI (scanned PDFs without a text layer may not import well).
+  - `claude_cli`: a curated list of Claude model ids (install [Claude Code](https://www.npmjs.com/package/@anthropic-ai/claude-code), run `claude setup-token` to mint a long-lived token from a Claude Pro/Max/Team/Enterprise subscription and set it as `CLAUDE_CODE_OAUTH_TOKEN`, or set `ANTHROPIC_API_KEY` instead; JobOps spawns headless `claude -p ...` with `--permission-mode plan` and no JobOps API key field). **Resume import** uses the CLI with extracted text, same as `gemini_cli`: DOCX is parsed locally; PDF uses local text extraction then JSON extraction via the CLI.
   - `ollama`: locally installed Ollama models
 - `openrouter`, `lmstudio`, and `openai_compatible` stay manual-entry because JobOps cannot safely infer the exact model catalog from those providers
 - For GLM, JobOps uses `https://api.z.ai/api/paas/v4` by default. Override the base URL only when using another Z.AI-compatible endpoint such as a coding-plan endpoint.
@@ -104,7 +106,8 @@ Settings gives you runtime overrides for the key parts of discovery, scoring, ta
 - Choose how AI output language is resolved:
   - `Manual`: always use the language you select, such as English, German, French, or Spanish
   - `Match Resume`: detect the dominant language from your resume/profile content and use that language for generated output
-- If language detection is unclear or there is not enough resume/profile text, JobOps falls back to English
+  - `Match job description`: detect the dominant supported language from each job description and use it for job-specific output
+- Automatic language detection currently supports English, German, French, and Spanish. If detection is unclear or the text is not in a supported language, JobOps falls back to English.
 - Resume tailoring keeps the exact source wording for ATS-sensitive resume headlines and job titles, even when the rest of the tailored content is generated in the selected language
 - When using the local LaTeX PDF renderer, fixed resume section titles follow the resolved output language
 - Downloaded resume filenames are ASCII-transliterated using the resolved language. For German, umlauts use `ä -> ae`, `ö -> oe`, `ü -> ue`, and `ß -> ss`.
@@ -124,6 +127,7 @@ Use these steps when you want Ghostwriter and resume tailoring to stay in a spec
 4. Under the language control, choose one of these modes:
    - **Manual**: pick the output language directly.
    - **Match Resume**: let JobOps infer the language from your resume/profile text.
+   - **Match job description**: let JobOps infer the language from each job description.
 5. If you chose **Manual**, select the language you want the AI to use.
 6. Review the rest of the writing defaults such as tone, formality, constraints, and do-not-use terms.
 7. Click **Save Changes**.
@@ -133,7 +137,8 @@ Defaults and constraints:
 
 - `Manual` is best when you always want output in one language regardless of the resume source text.
 - `Match Resume` is best when your base resume is already written in the language you want to preserve.
-- If JobOps cannot determine a reliable resume/profile language, it safely uses English.
+- `Match job description` is best when you want each application to follow the job description's language.
+- If JobOps cannot determine a reliable supported language, it safely uses English.
 - The generated resume content follows the resolved language, but ATS-sensitive headline and job-title wording stays exact so matching and parsing remain safer.
 - The local LaTeX PDF renderer uses the resolved language for fixed section headings such as Summary, Experience, Education, Projects, and Technical Skills.
 
@@ -145,6 +150,8 @@ Defaults and constraints:
   - Job scoring prompt
 - Each editor starts from the current effective template, not a blank override
 - Supported placeholders are shown inline for each template
+- Job scoring always appends minified normalized source-job JSON, including `null` values, plus the required output contract
+- The same scoring call may propose evidence-backed corrections to existing job facts. JobOps only accepts whitelisted, schema-valid values supported by an excerpt from the listing; these mandatory safety instructions remain appended even when you customize the scoring template
 - Use **Reset** to restore a single template, or **Reset all prompts** to restore all three
 - Template editing is intentionally advanced:
   - removing key instructions can degrade output quality
@@ -220,7 +227,8 @@ Readiness requires:
 - Set penalty amount
 - Optional auto-skip threshold for low-score jobs
 - Block jobs from companies that match configured keyword tokens
-- Add custom scoring instructions to tell the AI what to weigh more or less
+
+Per-search ranking preferences now live in **Run search**. Add them to the natural-language search brief, then review or edit them in **Configure details** before starting the run.
 
 ### Danger Zone
 

@@ -49,6 +49,7 @@ export default defineConfig({
       "../career-boards/**/*.test.ts",
       "../shared/src/**/*.test.ts",
       "../extractors/**/tests/**/*.test.ts",
+      "../visa-sponsor-providers/**/*.test.ts",
     ],
     exclude: ["node_modules/**", "dist/**"],
   },
@@ -67,6 +68,10 @@ export default defineConfig({
       "@career-boards/workday": path.resolve(
         __dirname,
         "../career-boards/workday/src/index.ts",
+      ),
+      "@career-boards/greenhouse": path.resolve(
+        __dirname,
+        "../career-boards/greenhouse/src/index.ts",
       ),
     },
   },

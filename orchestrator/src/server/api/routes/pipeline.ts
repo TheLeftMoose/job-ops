@@ -36,19 +36,30 @@ import {
   ensureChallengeViewer,
 } from "@server/services/challenge-viewer";
 import { simulatePipelineRun } from "@server/services/demo-simulator";
+import { reserveHostedUsage } from "@server/services/hosted-usage";
+import { planPipelineSearch } from "@server/services/pipeline-search-plan";
 import { ensurePipelineSearchTerms } from "@server/services/pipeline-search-terms";
+import {
+  resolveCountryAtPoint,
+  resolveNearbyPlaceNames,
+} from "@server/services/proximity-search";
 import { PIPELINE_EXTRACTOR_SOURCE_IDS } from "@shared/extractors";
 import {
   createLocationIntent,
   planLocationSources,
 } from "@shared/location-intelligence.js";
 import {
+  LOCATION_INPUT_MODE_VALUES,
   LOCATION_MATCH_STRICTNESS_VALUES,
   LOCATION_SEARCH_SCOPE_VALUES,
 } from "@shared/location-preferences.js";
 import type {
   PipelineProgressState,
   PipelineStatusResponse,
+} from "@shared/types";
+import {
+  MAX_PIPELINE_RUN_BUDGET,
+  normalizePipelineRunBudget,
 } from "@shared/types";
 import { type Request, type Response, Router } from "express";
 import { z } from "zod";
@@ -61,6 +72,18 @@ const pipelineSourceSchema = z.enum(
     ...(typeof PIPELINE_EXTRACTOR_SOURCE_IDS)[number][],
   ],
 );
+const pipelineRunBudgetSchema = z
+  .number()
+  .int()
+  .max(MAX_PIPELINE_RUN_BUDGET)
+  .transform(normalizePipelineRunBudget);
+const locationCountrySchema = z.object({
+  latitude: z.number().finite().min(-90).max(90),
+  longitude: z.number().finite().min(-180).max(180),
+});
+const locationAreaSchema = locationCountrySchema.extend({
+  radiusMiles: z.number().int().min(1).max(200),
+});
 
 function toSelectedSourcesValue(
   sources: readonly string[] | undefined,
@@ -125,6 +148,44 @@ pipelineRouter.get("/status", async (_req: Request, res: Response) => {
     );
   }
 });
+
+pipelineRouter.post(
+  "/location-country",
+  async (req: Request, res: Response) => {
+    try {
+      const point = locationCountrySchema.parse(req.body);
+      const country = await resolveCountryAtPoint(point);
+      ok(res, { country });
+    } catch (error) {
+      fail(
+        res,
+        error instanceof z.ZodError
+          ? badRequest("Invalid map point.", error.flatten())
+          : serviceUnavailable(
+              "Unable to detect the country at the selected map point.",
+            ),
+      );
+    }
+  },
+);
+
+pipelineRouter.post(
+  "/location-area-preview",
+  async (req: Request, res: Response) => {
+    try {
+      const proximity = locationAreaSchema.parse(req.body);
+      const locations = await resolveNearbyPlaceNames(proximity);
+      ok(res, { locations });
+    } catch (error) {
+      fail(
+        res,
+        error instanceof z.ZodError
+          ? badRequest("Invalid map area.", error.flatten())
+          : serviceUnavailable("Unable to preview locations in this map area."),
+      );
+    }
+  },
+);
 
 /**
  * GET /api/pipeline/progress/snapshot - Get the current pipeline progress state
@@ -197,14 +258,30 @@ const pipelineSearchPresetConfigSchema = z.object({
   sources: z.array(pipelineSourceSchema).min(1),
   country: z.string().trim().max(100),
   cityLocations: z.array(z.string().trim().min(1).max(100)).max(25),
+  locationMode: z.enum(LOCATION_INPUT_MODE_VALUES).optional(),
+  proximity: z
+    .object({
+      latitude: z.number().finite().min(-90).max(90),
+      longitude: z.number().finite().min(-180).max(180),
+      radiusMiles: z.number().int().min(1).max(200),
+    })
+    .nullable()
+    .optional(),
   workplaceTypes: z.array(z.enum(WORKPLACE_TYPE_VALUES)).min(1).max(3),
   searchScope: z.enum(LOCATION_SEARCH_SCOPE_VALUES),
   matchStrictness: z.enum(LOCATION_MATCH_STRICTNESS_VALUES),
   topN: z.number().int().min(1).max(50),
   minSuitabilityScore: z.number().int().min(0).max(100),
-  runBudget: z.number().int().min(50).max(1000),
+  runBudget: pipelineRunBudgetSchema,
+  scoringInstructions: z.string().trim().max(4000).optional().default(""),
   automaticPresetId: z
     .enum(["fast", "balanced", "detailed", "custom"])
+    .optional(),
+  // Optional per-#621 Watchlist source selection persisted with the preset.
+  // Omitted = legacy behavior (include every saved Watchlist source).
+  watchlistSelectedSourceIds: z
+    .array(z.string().min(1).max(128))
+    .max(200)
     .optional(),
 });
 
@@ -224,6 +301,13 @@ const updatePipelineSearchPresetSchema = z
   .refine((value) => value.name !== undefined || value.config !== undefined, {
     message: "Provide a name or config update",
   });
+
+const pipelineSearchPlanSchema = z
+  .object({
+    prompt: z.string().trim().min(1).max(2000),
+    currentConfig: pipelineSearchPresetConfigSchema,
+  })
+  .strict();
 
 pipelineRouter.get("/search-presets", async (_req: Request, res: Response) => {
   try {
@@ -363,6 +447,25 @@ pipelineRouter.delete(
   },
 );
 
+pipelineRouter.post("/search-plan", async (req: Request, res: Response) => {
+  try {
+    const input = pipelineSearchPlanSchema.parse(req.body ?? {});
+    ok(res, await planPipelineSearch(input));
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return fail(res, badRequest(error.message, error.flatten()));
+    }
+    fail(
+      res,
+      new AppError({
+        status: 500,
+        code: "INTERNAL_ERROR",
+        message: error instanceof Error ? error.message : "Unknown error",
+      }),
+    );
+  }
+});
+
 /**
  * GET /api/pipeline/runs/:id/insights - Get exact and inferred metrics for a run
  */
@@ -395,10 +498,19 @@ const runPipelineSchema = z.object({
   topN: z.number().min(1).max(50).optional(),
   minSuitabilityScore: z.number().min(0).max(100).optional(),
   sources: z.array(pipelineSourceSchema).min(1).optional(),
-  runBudget: z.number().min(50).max(1000).optional(),
+  runBudget: pipelineRunBudgetSchema.optional(),
   searchTerms: z.array(z.string().trim().min(1)).optional(),
+  scoringInstructions: z.string().trim().max(4000).optional(),
   country: z.string().trim().optional(),
   cityLocations: z.array(z.string().trim().min(1)).optional(),
+  proximity: z
+    .object({
+      latitude: z.number().finite().min(-90).max(90),
+      longitude: z.number().finite().min(-180).max(180),
+      radiusMiles: z.number().int().min(1).max(200),
+    })
+    .nullable()
+    .optional(),
   workplaceTypes: z
     .array(z.enum(WORKPLACE_TYPE_VALUES))
     .min(1)
@@ -406,6 +518,12 @@ const runPipelineSchema = z.object({
     .optional(),
   searchScope: z.enum(LOCATION_SEARCH_SCOPE_VALUES).optional(),
   matchStrictness: z.enum(LOCATION_MATCH_STRICTNESS_VALUES).optional(),
+  // Per-#621: optional client-supplied per-run Watchlist source filter.
+  // Omitted preserves the legacy "include every saved Watchlist source"
+  // behavior; [] disables Watchlist entirely; non-empty restricts to a
+  // subset. Cross-tenant safety is enforced by re-resolving IDs against
+  // the user's saved Watchlist sources inside discoverJobsStep.
+  watchlistSelectedSourceIds: z.array(z.string().min(1).max(128)).optional(),
 });
 
 pipelineRouter.post("/run", async (req: Request, res: Response) => {
@@ -414,6 +532,7 @@ pipelineRouter.post("/run", async (req: Request, res: Response) => {
     const locationIntent = createLocationIntent({
       selectedCountry: config.country,
       cityLocations: config.cityLocations,
+      proximity: config.proximity,
       workplaceTypes: config.workplaceTypes,
       geoScope: config.searchScope,
       matchStrictness: config.matchStrictness,
@@ -478,23 +597,39 @@ pipelineRouter.post("/run", async (req: Request, res: Response) => {
         topN: config.topN,
         minSuitabilityScore: config.minSuitabilityScore,
         sources: config.sources,
+        scoringInstructions: config.scoringInstructions,
         locationIntent,
       });
       return okWithMeta(res, simulated, { simulated: true });
     }
 
+    if (getPipelineStatus().isRunning) {
+      return fail(res, conflict("Pipeline is already running"));
+    }
+
     const searchTermsState = await ensurePipelineSearchTerms({
       requestedSearchTerms: config.searchTerms,
+    });
+    const pipelineUsage = await reserveHostedUsage({
+      action: "pipeline_run",
     });
 
     // Start pipeline in background
     runWithRequestContext({}, () => {
-      runPipeline({
-        topN: config.topN,
-        minSuitabilityScore: config.minSuitabilityScore,
-        sources: config.sources,
-        locationIntent,
-      }).catch((error) => {
+      runPipeline(
+        {
+          topN: config.topN,
+          minSuitabilityScore: config.minSuitabilityScore,
+          sources: config.sources,
+          scoringInstructions: config.scoringInstructions,
+          runBudget: config.runBudget,
+          locationIntent,
+          watchlistSelectedSourceIds: config.watchlistSelectedSourceIds,
+        },
+        {
+          hostedUsageReservationId: pipelineUsage.reservation?.id ?? null,
+        },
+      ).catch((error) => {
         logger.error("Background pipeline run failed", error);
       });
     });
@@ -505,25 +640,35 @@ pipelineRouter.post("/run", async (req: Request, res: Response) => {
         selected_sources: toSelectedSourcesValue(config.sources),
         top_n: config.topN,
         min_suitability_score: config.minSuitabilityScore,
+        run_budget: config.runBudget,
         country: config.country,
         has_city_locations: Array.isArray(config.cityLocations)
           ? config.cityLocations.length > 0
           : false,
         search_terms_count: searchTermsState.searchTermsCount,
         search_terms_source: searchTermsState.source,
+        // Count-only, never raw IDs (tenant safety / PII).
+        watchlist_source_filter_count: Array.isArray(
+          config.watchlistSelectedSourceIds,
+        )
+          ? config.watchlistSelectedSourceIds.length
+          : undefined,
       },
       {
         requestOrigin: resolveRequestOrigin(req),
         urlPath: "/jobs",
       },
     );
-    ok(res, { message: "Pipeline started" });
+    ok(res, { message: "Search started" });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return fail(res, badRequest(error.message, error.flatten()));
     }
     if (error instanceof Error && error.name === "AbortError") {
       return fail(res, requestTimeout("Request timed out"));
+    }
+    if (error instanceof AppError) {
+      return fail(res, error);
     }
     fail(
       res,

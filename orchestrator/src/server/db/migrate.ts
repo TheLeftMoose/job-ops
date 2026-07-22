@@ -178,6 +178,39 @@ const migrations = [
     UNIQUE(user_id, tenant_id)
   )`,
 
+  `CREATE TABLE IF NOT EXISTS hosted_usage_counters (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    period TEXT NOT NULL,
+    action TEXT NOT NULL CHECK(action IN ('job_search', 'pipeline_run', 'tailoring', 'ghostwriter', 'pdf_export')),
+    used_units INTEGER NOT NULL DEFAULT 0,
+    reserved_units INTEGER NOT NULL DEFAULT 0,
+    limit_units INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE(tenant_id, user_id, period, action)
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS hosted_usage_reservations (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    period TEXT NOT NULL,
+    action TEXT NOT NULL CHECK(action IN ('job_search', 'pipeline_run', 'tailoring', 'ghostwriter', 'pdf_export')),
+    reserved_units INTEGER NOT NULL,
+    used_units INTEGER NOT NULL DEFAULT 0,
+    refunded_units INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'reserved' CHECK(status IN ('reserved', 'settled', 'refunded')),
+    idempotency_key TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  )`,
+
   `CREATE TABLE IF NOT EXISTS jobs (
     id TEXT PRIMARY KEY,
     tenant_id TEXT NOT NULL DEFAULT 'tenant_default',
@@ -386,6 +419,14 @@ const migrations = [
 
   `CREATE INDEX IF NOT EXISTS idx_auth_sessions_revoked_at
     ON auth_sessions(revoked_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_hosted_usage_counters_tenant_user_period
+    ON hosted_usage_counters(tenant_id, user_id, period)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_hosted_usage_counters_tenant_user_period_action_unique
+    ON hosted_usage_counters(tenant_id, user_id, period, action)`,
+  `CREATE INDEX IF NOT EXISTS idx_hosted_usage_reservations_tenant_user_period
+    ON hosted_usage_reservations(tenant_id, user_id, period)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_hosted_usage_reservations_idempotency_unique
+    ON hosted_usage_reservations(tenant_id, user_id, period, action, idempotency_key)`,
 
   `CREATE TABLE IF NOT EXISTS pipeline_search_presets (
     id TEXT PRIMARY KEY,
@@ -1636,12 +1677,50 @@ function seedLegacyOwnerFromBasicAuth(): void {
   sqlite.exec("DELETE FROM auth_sessions");
 }
 
+function seedLegacyOnboardingMigration(): void {
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS app_data_migrations (
+    id TEXT PRIMARY KEY,
+    applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+
+  const migrationId = "onboarding-markers-v1";
+  const applied = sqlite
+    .prepare("SELECT 1 FROM app_data_migrations WHERE id = ?")
+    .get(migrationId);
+  if (applied) return;
+
+  sqlite.exec(`INSERT OR IGNORE INTO settings(
+    tenant_id, user_id, key, value, created_at, updated_at
+  )
+  SELECT scopes.tenant_id, scopes.user_id, 'onboardingLegacyMigrationPending', '1', datetime('now'), datetime('now')
+  FROM (
+    SELECT tenant_id, user_id FROM settings WHERE key NOT LIKE 'onboarding%'
+    UNION
+    SELECT tenant_id, user_id FROM design_resume_documents
+  ) AS scopes
+  WHERE NOT EXISTS (
+    SELECT 1 FROM settings existing
+    WHERE existing.tenant_id = scopes.tenant_id
+      AND coalesce(existing.user_id, '') = coalesce(scopes.user_id, '')
+      AND existing.key IN (
+        'onboardingProfileCompleted',
+        'onboardingLlmCompleted',
+        'onboardingResumeConfirmedSource',
+        'onboardingLegacyMigrationPending'
+      )
+  )`);
+  sqlite
+    .prepare("INSERT INTO app_data_migrations(id) VALUES (?)")
+    .run(migrationId);
+}
+
 console.log("🔐 Applying tenancy compatibility migrations...");
 ensureTenantColumns();
 seedLegacyOwnerFromBasicAuth();
 ensurePrivateUserColumns();
 rebuildPostApplicationPrivateTables();
 rebuildSettingsTable();
+seedLegacyOnboardingMigration();
 ensureTracerLinksUniqueIndex();
 sqlite.exec("DROP INDEX IF EXISTS idx_settings_tenant_key_unique");
 sqlite.exec("DROP INDEX IF EXISTS idx_settings_tenant_user_key_unique");

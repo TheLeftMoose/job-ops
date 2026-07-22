@@ -3,6 +3,7 @@ import {
   TYPST_THEME_VALUES,
 } from "../generated/typst-themes";
 import type {
+  LocationInputMode,
   LocationMatchStrictness,
   LocationSearchScope,
 } from "../location-preferences";
@@ -25,13 +26,16 @@ export interface ResumeProjectsSettings {
 
 export const LLM_PROVIDER_VALUES = [
   "openrouter",
+  "requesty",
   "lmstudio",
   "ollama",
   "openai",
+  "anthropic",
   "openai_compatible",
   "glm",
   "gemini",
   "gemini_cli",
+  "claude_cli",
   "codex",
 ] as const;
 export type LlmProviderId = (typeof LLM_PROVIDER_VALUES)[number];
@@ -69,6 +73,7 @@ export type TypstTheme = (typeof TYPST_THEME_VALUES)[number];
 export const CHAT_STYLE_LANGUAGE_MODE_VALUES = [
   "manual",
   "match-resume",
+  "match-job-description",
 ] as const;
 
 export type ChatStyleLanguageMode =
@@ -187,7 +192,7 @@ export interface SearchTermsSuggestionResponse {
   source: "ai" | "fallback";
 }
 
-export type OnboardingRequirementId = "model" | "resume";
+export type OnboardingRequirementId = "profile" | "model" | "resume";
 
 export type OnboardingRequirementStatus =
   | "ready"
@@ -197,6 +202,8 @@ export type OnboardingRequirementStatus =
 
 export type OnboardingRequirementPrimaryAction =
   | "connect_model"
+  | "save_profile"
+  | "confirm_resume"
   | "upload_resume"
   | "connect_rxresume"
   | "select_rxresume_template"
@@ -250,6 +257,10 @@ export interface AppSettings {
   jobindexMaxJobsPerTerm: Resolved<number>;
   searchTerms: Resolved<string[]>;
   workplaceTypes: Resolved<Array<"remote" | "hybrid" | "onsite">>;
+  onboardingProfileCompleted: Resolved<boolean>;
+  onboardingLlmCompleted: Resolved<boolean>;
+  onboardingResumeConfirmedSource: Resolved<string>;
+  onboardingLegacyMigrationPending: Resolved<boolean>;
   blockedCompanyKeywords: Resolved<string[]>;
   scoringInstructions: Resolved<string>;
   ghostwriterSystemPromptTemplate: Resolved<string>;
@@ -257,6 +268,10 @@ export interface AppSettings {
   tailoringPromptTemplate: Resolved<string>;
   scoringPromptTemplate: Resolved<string>;
   searchCities: Resolved<string>;
+  locationSearchMode: Resolved<LocationInputMode>;
+  locationLatitude: Resolved<number | null>;
+  locationLongitude: Resolved<number | null>;
+  locationRadiusMiles: Resolved<number>;
   locationSearchScope: Resolved<LocationSearchScope>;
   locationMatchStrictness: Resolved<LocationMatchStrictness>;
   jobspyResultsWanted: Resolved<number>;

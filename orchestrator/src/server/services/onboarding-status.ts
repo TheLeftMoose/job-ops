@@ -43,6 +43,17 @@ export type OnboardingModelActionInput = {
   model?: string | null;
 };
 
+export type OnboardingProfileActionInput = {
+  country?: string | null;
+  cities: string[];
+  workplaceTypes: Array<"remote" | "hybrid" | "onsite">;
+  requiresVisaSponsorship: boolean;
+};
+
+export type OnboardingResumeConfirmActionInput = {
+  source: string;
+};
+
 export type OnboardingRxResumeActionInput = {
   apiKey?: string | null;
   baseUrl?: string | null;
@@ -66,6 +77,7 @@ export function normalizeLlmProviderValue(
   if (!provider) return undefined;
   const normalized = provider.trim().toLowerCase().replace(/[-.]/g, "_");
   const mapped = mapGlmProviderAlias(normalized);
+  if (mapped === "claude") return "anthropic";
   return (LLM_PROVIDER_VALUES as readonly string[]).includes(mapped)
     ? (mapped as LlmProviderId)
     : undefined;
@@ -285,6 +297,22 @@ function classifyValidation(
   return "invalid";
 }
 
+function getModelValidationMessage(args: {
+  validation: ValidationResponse;
+  provider: LlmProviderId | undefined;
+  providerLabel: string;
+}): string {
+  const baseMessage =
+    args.validation.message ||
+    `Job Ops could not verify ${args.providerLabel}. Check the connection and try again.`;
+
+  if (args.provider === "ollama" && isUnavailable(args.validation)) {
+    return `${baseMessage} Local Ollama models can be slow or unavailable on smaller hardware. Try a smaller or faster model, make sure Ollama is reachable from the Job Ops container, add more CPU/GPU/RAM, or switch provider from the model step.`;
+  }
+
+  return baseMessage;
+}
+
 function buildRequirement(args: {
   id: OnboardingRequirement["id"];
   status: OnboardingRequirementStatus;
@@ -304,15 +332,50 @@ function buildRequirement(args: {
 }
 
 async function buildModelRequirement(): Promise<OnboardingRequirement> {
-  const [provider, baseUrl] = await Promise.all([
+  const [provider, baseUrl, model, completed] = await Promise.all([
     getSetting("llmProvider"),
     getSetting("llmBaseUrl"),
+    getSetting("model"),
+    getSetting("onboardingLlmCompleted"),
   ]);
-  const validation = await validateLlm({});
   const normalizedProvider = normalizeLlmProviderValue(provider);
   const providerLabel = normalizedProvider ?? "selected provider";
 
-  if (validation.valid) {
+  if (completed === "1") {
+    if (normalizedProvider === "codex") {
+      const validation = await validateLlm({ provider: "codex" });
+      if (!validation.valid) {
+        return buildRequirement({
+          id: "model",
+          status: "needs_action",
+          title: "Reconnect Codex",
+          message:
+            validation.message ||
+            "The saved Codex sign-in is no longer usable. Sign in again before continuing.",
+          primaryAction: "connect_model",
+          details: {
+            provider: normalizedProvider,
+            baseUrl: null,
+          },
+        });
+      }
+    }
+
+    if (normalizedProvider === "ollama" && !model?.trim()) {
+      return buildRequirement({
+        id: "model",
+        status: "needs_action",
+        title: "Choose an Ollama model",
+        message:
+          "Ollama is connected. Choose one of the models installed in Ollama before continuing.",
+        primaryAction: "connect_model",
+        details: {
+          provider: normalizedProvider,
+          baseUrl: baseUrl?.trim() || null,
+        },
+      });
+    }
+
     return buildRequirement({
       id: "model",
       status: "ready",
@@ -326,22 +389,12 @@ async function buildModelRequirement(): Promise<OnboardingRequirement> {
       },
     });
   }
-
-  const status = classifyValidation(validation);
   return buildRequirement({
     id: "model",
-    status,
-    title:
-      status === "checking_unavailable"
-        ? "Model check is unavailable"
-        : status === "invalid"
-          ? "Model connection needs attention"
-          : "Connect your LLM",
-    message:
-      validation.message ||
-      `Job Ops could not verify ${providerLabel}. Check the connection and try again.`,
-    primaryAction:
-      status === "checking_unavailable" ? "recheck" : "connect_model",
+    status: "needs_action",
+    title: "Connect your AI provider",
+    message: `Choose and verify ${providerLabel}. The connection is saved only after the server confirms it can be used.`,
+    primaryAction: "connect_model",
     details: {
       provider: normalizedProvider ?? null,
       baseUrl: baseUrl?.trim() || null,
@@ -350,17 +403,25 @@ async function buildModelRequirement(): Promise<OnboardingRequirement> {
 }
 
 async function buildResumeRequirement(): Promise<OnboardingRequirement> {
-  const localStatus = await getDesignResumeStatus();
+  const [localStatus, confirmedSource] = await Promise.all([
+    getDesignResumeStatus(),
+    getSetting("onboardingResumeConfirmedSource"),
+  ]);
   if (localStatus.exists) {
+    const source = `local:${localStatus.documentId}`;
     return buildRequirement({
       id: "resume",
-      status: "ready",
-      title: "Resume loaded",
+      status: confirmedSource === source ? "ready" : "needs_action",
+      title:
+        confirmedSource === source ? "Resume confirmed" : "Review your resume",
       message:
-        "Your resume is ready to drive job matching, fit assessment, search terms, and application workflows.",
-      primaryAction: "none",
+        confirmedSource === source
+          ? "You confirmed the resume Job Ops should use for matching and applications."
+          : "Check the parsed resume, then confirm that Job Ops loaded the correct document.",
+      primaryAction: confirmedSource === source ? "none" : "confirm_resume",
       details: {
         source: "local",
+        confirmationSource: source,
         documentId: localStatus.documentId ?? null,
         updatedAt: localStatus.updatedAt ?? null,
       },
@@ -398,14 +459,22 @@ async function buildResumeRequirement(): Promise<OnboardingRequirement> {
 
   const validation = await validateResumeConfig();
   if (validation.valid) {
+    const source = `rxresume:${resumeId}`;
     return buildRequirement({
       id: "resume",
-      status: "ready",
-      title: "Resume loaded",
+      status: confirmedSource === source ? "ready" : "needs_action",
+      title:
+        confirmedSource === source ? "Resume confirmed" : "Review your resume",
       message:
-        "The selected Reactive Resume template is ready to drive matching, fit assessment, search terms, and application workflows.",
-      primaryAction: "none",
-      details: { source: "rxresume", resumeId },
+        confirmedSource === source
+          ? "You confirmed the Reactive Resume template Job Ops should use."
+          : "Check the selected Reactive Resume document, then confirm it before continuing.",
+      primaryAction: confirmedSource === source ? "none" : "confirm_resume",
+      details: {
+        source: "rxresume",
+        resumeId,
+        confirmationSource: source,
+      },
     });
   }
 
@@ -462,6 +531,48 @@ async function buildHostedResumeRequirement(): Promise<OnboardingRequirement> {
   });
 }
 
+async function migrateLegacyOnboardingState(args: {
+  hostedMode: boolean;
+  userEditableLlmSettings: boolean;
+}): Promise<void> {
+  if ((await getSetting("onboardingLegacyMigrationPending")) !== "1") return;
+
+  const update: UpdateSettingsInput = {
+    onboardingProfileCompleted: true,
+    onboardingLegacyMigrationPending: false,
+  };
+
+  if (args.userEditableLlmSettings) {
+    const [provider, model, validation] = await Promise.all([
+      getSetting("llmProvider"),
+      getSetting("model"),
+      validateLlm({}),
+    ]);
+    const normalizedProvider = normalizeLlmProviderValue(provider);
+    update.onboardingLlmCompleted =
+      validation.valid && !(normalizedProvider === "ollama" && !model?.trim());
+  }
+
+  if (!args.hostedMode) {
+    const localStatus = await getDesignResumeStatus();
+    if (localStatus.exists && localStatus.documentId) {
+      update.onboardingResumeConfirmedSource = `local:${localStatus.documentId}`;
+    } else {
+      const { resumeId } = await getConfiguredRxResumeBaseResumeId();
+      if (resumeId && (await validateResumeConfig()).valid) {
+        update.onboardingResumeConfirmedSource = `rxresume:${resumeId}`;
+      }
+    }
+  }
+
+  await applySettingsUpdates(update);
+  logger.info("Migrated legacy onboarding state", {
+    requestId: getRequestId() ?? null,
+    modelReady: update.onboardingLlmCompleted ?? null,
+    resumeReady: Boolean(update.onboardingResumeConfirmedSource),
+  });
+}
+
 export async function getOnboardingStatus(): Promise<OnboardingStatusResponse> {
   const appStatus = getJobOpsAppStatus();
   const userEditableLlmSettings =
@@ -470,6 +581,13 @@ export async function getOnboardingStatus(): Promise<OnboardingStatusResponse> {
 
   if (isDemoMode()) {
     const requirements: OnboardingRequirement[] = [
+      buildRequirement({
+        id: "profile",
+        status: "ready",
+        title: "Search preferences saved",
+        message: "Demo mode includes search preferences.",
+        primaryAction: "none",
+      }),
       ...(userEditableLlmSettings
         ? [
             buildRequirement({
@@ -492,14 +610,35 @@ export async function getOnboardingStatus(): Promise<OnboardingStatusResponse> {
     return { complete: true, nextRequirementId: null, requirements };
   }
 
+  await migrateLegacyOnboardingState({
+    hostedMode,
+    userEditableLlmSettings,
+  });
+
+  const profileCompleted = await getSetting("onboardingProfileCompleted");
+  const profileRequirement = buildRequirement({
+    id: "profile",
+    status: profileCompleted === "1" ? "ready" : "needs_action",
+    title:
+      profileCompleted === "1"
+        ? "Search preferences saved"
+        : "Tell us where you want to work",
+    message:
+      profileCompleted === "1"
+        ? "Your location and workplace preferences will seed future runs."
+        : "Add your preferred locations and workplace style so Job Ops can prepare sensible run defaults and sponsor-focused sources.",
+    primaryAction: profileCompleted === "1" ? "none" : "save_profile",
+  });
   const requirements = userEditableLlmSettings
     ? [
+        profileRequirement,
         await buildModelRequirement(),
         hostedMode
           ? await buildHostedResumeRequirement()
           : await buildResumeRequirement(),
       ]
     : [
+        profileRequirement,
         hostedMode
           ? await buildHostedResumeRequirement()
           : await buildResumeRequirement(),
@@ -543,6 +682,27 @@ export async function saveOnboardingModelAction(
   input: OnboardingModelActionInput,
 ): Promise<OnboardingStatusResponse> {
   const provider = normalizeLlmProviderValue(input.provider);
+  const [storedProvider, storedModel] = await Promise.all([
+    getSetting("llmProvider"),
+    getSetting("model"),
+  ]);
+  const storedNormalizedProvider = normalizeLlmProviderValue(storedProvider);
+  const hasInputModel = Boolean(input.model?.trim());
+  const hasSavedOllamaModel =
+    provider === "ollama" &&
+    storedNormalizedProvider === "ollama" &&
+    Boolean(storedModel?.trim());
+
+  if (provider === "ollama" && !hasInputModel && !hasSavedOllamaModel) {
+    throw unprocessableEntity(
+      "Choose an Ollama model before continuing. If no models appear, pull a model in Ollama and try again.",
+      {
+        provider,
+        status: null,
+      },
+    );
+  }
+
   const validation = await validateLlm({
     provider,
     baseUrl: input.baseUrl,
@@ -559,7 +719,11 @@ export async function saveOnboardingModelAction(
 
   if (!validation.valid) {
     throw unprocessableEntity(
-      validation.message || "Model connection could not be verified.",
+      getModelValidationMessage({
+        validation,
+        provider,
+        providerLabel: provider ?? "selected provider",
+      }),
       {
         provider: provider ?? null,
         status: validation.status ?? null,
@@ -572,8 +736,51 @@ export async function saveOnboardingModelAction(
   if (input.baseUrl !== undefined) update.llmBaseUrl = input.baseUrl ?? "";
   if (input.apiKey?.trim()) update.llmApiKey = input.apiKey.trim();
   if (input.model?.trim()) update.model = input.model.trim();
+  update.onboardingLlmCompleted = true;
 
   await persistOnboardingSettings(update, route);
+  return getOnboardingStatus();
+}
+
+export async function saveOnboardingProfileAction(
+  input: OnboardingProfileActionInput,
+): Promise<OnboardingStatusResponse> {
+  const route = "POST /api/onboarding/actions/profile";
+  await persistOnboardingSettings(
+    {
+      searchCities: input.cities.join("|"),
+      workplaceTypes: input.workplaceTypes,
+      jobspyCountryIndeed: input.country?.trim() || null,
+      showSponsorInfo: input.requiresVisaSponsorship,
+      onboardingProfileCompleted: true,
+    },
+    route,
+  );
+  return getOnboardingStatus();
+}
+
+export async function confirmOnboardingResumeAction(
+  input: OnboardingResumeConfirmActionInput,
+): Promise<OnboardingStatusResponse> {
+  const localStatus = await getDesignResumeStatus();
+  const { resumeId } = await getConfiguredRxResumeBaseResumeId();
+  const validSources = new Set<string>();
+  if (localStatus.exists && localStatus.documentId) {
+    validSources.add(`local:${localStatus.documentId}`);
+  }
+  if (resumeId && (await validateResumeConfig()).valid) {
+    validSources.add(`rxresume:${resumeId}`);
+  }
+  if (!validSources.has(input.source)) {
+    throw unprocessableEntity(
+      "The selected resume changed before it could be confirmed. Review the current resume and try again.",
+      { source: input.source },
+    );
+  }
+  await persistOnboardingSettings(
+    { onboardingResumeConfirmedSource: input.source },
+    "POST /api/onboarding/actions/resume/confirm",
+  );
   return getOnboardingStatus();
 }
 
