@@ -79,13 +79,34 @@ function getDefaultBaseUrlForProvider(
   if (normalized === "ollama") return "http://localhost:11434";
   if (normalized === "lmstudio") return "http://localhost:1234";
   if (normalized === "openai") return "https://api.openai.com";
+  if (normalized === "anthropic" || normalized === "claude") {
+    return "https://api.anthropic.com";
+  }
   if (normalized === "openai_compatible") return "https://api.openai.com";
   if (normalized === "glm") return "https://api.z.ai/api/paas/v4";
   if (normalized === "gemini") {
     return "https://generativelanguage.googleapis.com";
   }
-  if (normalized === "gemini_cli" || normalized === "codex") return null;
+  if (
+    normalized === "gemini_cli" ||
+    normalized === "claude_cli" ||
+    normalized === "codex"
+  )
+    return null;
+  if (normalized === "requesty") return "https://router.requesty.ai/v1";
   return "https://openrouter.ai";
+}
+
+function providerUsesConfiguredBaseUrl(
+  provider: string | null | undefined,
+): boolean {
+  const normalized = provider?.trim().toLowerCase().replace(/[-.]/g, "_");
+  return (
+    normalized === "lmstudio" ||
+    normalized === "ollama" ||
+    normalized === "openai_compatible" ||
+    normalized === "glm"
+  );
 }
 
 function readPurposeApiKeys(raw: string | null | undefined) {
@@ -122,10 +143,11 @@ export async function resolveLlmRuntimeSettings(
     ? settings?.llmPurposeOverrides?.value?.[purpose]
     : undefined;
   const provider = purposeOverride?.provider?.trim() || defaultProvider;
-  const baseUrl =
-    purposeOverride?.baseUrl?.trim() ||
-    (provider === defaultProvider ? defaultBaseUrl : null) ||
-    getDefaultBaseUrlForProvider(provider);
+  const configuredBaseUrl = providerUsesConfiguredBaseUrl(provider)
+    ? purposeOverride?.baseUrl?.trim() ||
+      (provider === defaultProvider ? defaultBaseUrl : null)
+    : null;
+  const baseUrl = configuredBaseUrl || getDefaultBaseUrlForProvider(provider);
   const purposeApiKeys = readPurposeApiKeys(overrides?.llmPurposeApiKeys);
   const purposeApiKey =
     isLlmPurpose(purpose) && purposeApiKeys[purpose]?.trim()

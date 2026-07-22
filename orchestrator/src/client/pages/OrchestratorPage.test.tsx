@@ -77,6 +77,8 @@ let mockAutomaticRunValues: AutomaticRunValues = {
   runBudget: 150,
   country: "united kingdom",
   cityLocations: [],
+  locationMode: "cities",
+  proximity: null,
   workplaceTypes: ["remote", "hybrid", "onsite"],
   searchScope: "selected_only",
   matchStrictness: "exact_only",
@@ -117,6 +119,8 @@ const processingJob = createJob({
 
 let mockJobs = [jobFixture, job2, processingJob];
 let mockSelectedJob: Job | null = jobFixture;
+let mockSelectedJobListItemOverride: Job | null | undefined;
+let mockSelectedJobLoadState: "idle" | "loading" | "error" = "idle";
 
 const createMatchMedia = (matches: boolean | Record<string, boolean>) =>
   vi.fn().mockImplementation((query: string) => ({
@@ -133,6 +137,12 @@ vi.mock("./orchestrator/useOrchestratorData", () => ({
   useOrchestratorData: () => ({
     jobs: mockJobs,
     selectedJob: mockSelectedJob,
+    selectedJobListItem:
+      mockSelectedJobListItemOverride === undefined
+        ? mockSelectedJob
+        : mockSelectedJobListItemOverride,
+    selectedJobLoadState: mockSelectedJobLoadState,
+    retrySelectedJob: vi.fn(),
     stats: {
       discovered: 1,
       processing: 1,
@@ -174,6 +184,11 @@ vi.mock("../hooks/useSettings", () => ({
     settings: {
       ukvisajobsEmail: null,
       ukvisajobsPasswordHint: null,
+      locationSearchMode: {
+        value: "cities",
+        default: "radius",
+        override: "cities",
+      },
     },
     refreshSettings: vi.fn(),
   }),
@@ -526,6 +541,8 @@ describe("OrchestratorPage", () => {
     mockPipelineSources = ["linkedin"];
     mockJobs = [jobFixture, job2, processingJob];
     mockSelectedJob = jobFixture;
+    mockSelectedJobListItemOverride = undefined;
+    mockSelectedJobLoadState = "idle";
     mockLoadJobs = vi.fn().mockResolvedValue(undefined);
     mockAutomaticRunValues = {
       topN: 12,
@@ -535,6 +552,8 @@ describe("OrchestratorPage", () => {
       runBudget: 150,
       country: "united kingdom",
       cityLocations: [],
+      locationMode: "cities",
+      proximity: null,
       workplaceTypes: ["remote", "hybrid", "onsite"],
       searchScope: "selected_only",
       matchStrictness: "exact_only",
@@ -1024,16 +1043,20 @@ describe("OrchestratorPage", () => {
       expect(api.updateSettings).toHaveBeenCalledWith({
         searchTerms: ["backend"],
         workplaceTypes: ["remote", "hybrid", "onsite"],
-        jobspyResultsWanted: 150,
-        gradcrackerMaxJobsPerTerm: 150,
-        naukriMaxJobsPerTerm: 150,
-        ukvisajobsMaxJobs: 150,
-        adzunaMaxJobsPerTerm: 150,
-        startupjobsMaxJobsPerTerm: 150,
-        jobindexMaxJobsPerTerm: 150,
-        seekMaxJobsPerTerm: 150,
+        jobspyResultsWanted: 300,
+        gradcrackerMaxJobsPerTerm: 300,
+        naukriMaxJobsPerTerm: 300,
+        ukvisajobsMaxJobs: 300,
+        adzunaMaxJobsPerTerm: 300,
+        startupjobsMaxJobsPerTerm: 300,
+        jobindexMaxJobsPerTerm: 300,
+        seekMaxJobsPerTerm: 300,
         jobspyCountryIndeed: "united kingdom",
         searchCities: null,
+        locationSearchMode: "cities",
+        locationLatitude: null,
+        locationLongitude: null,
+        locationRadiusMiles: 50,
         locationSearchScope: "selected_only",
         locationMatchStrictness: "exact_only",
       });
@@ -1042,11 +1065,12 @@ describe("OrchestratorPage", () => {
       topN: 12,
       minSuitabilityScore: 55,
       sources: ["linkedin"],
-      runBudget: 150,
+      runBudget: 300,
       searchTerms: ["backend"],
       scoringInstructions: "",
       country: "united kingdom",
       cityLocations: [],
+      proximity: null,
       workplaceTypes: ["remote", "hybrid", "onsite"],
       searchScope: "selected_only",
       matchStrictness: "exact_only",
@@ -1055,6 +1079,37 @@ describe("OrchestratorPage", () => {
     expect(setIntervalSpy).not.toHaveBeenCalledWith(expect.any(Function), 5000);
 
     setIntervalSpy.mockRestore();
+  });
+
+  it("shows an error when automatic settings fail to save", async () => {
+    window.matchMedia = createMatchMedia(
+      true,
+    ) as unknown as typeof window.matchMedia;
+    vi.mocked(api.updateSettings).mockRejectedValueOnce(
+      new Error("Search cities must be 3000 characters or fewer."),
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/jobs/ready"]}>
+        <Routes>
+          <Route path="/jobs/:tab" element={<OrchestratorPage />} />
+          <Route path="/jobs/:tab/:jobId" element={<OrchestratorPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    openAutomaticRunComposer();
+    fireEvent.click(screen.getByTestId("run-automatic"));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        "Search cities must be 3000 characters or fewer.",
+      );
+    });
+    expect(api.runPipeline).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("heading", { name: "Something went wrong" }),
+    ).not.toBeInTheDocument();
   });
 
   it("swaps the dashboard for the full-screen search composer", async () => {
@@ -1174,6 +1229,31 @@ describe("OrchestratorPage", () => {
     expect(screen.queryByText(/no jobs found/i)).not.toBeInTheDocument();
   });
 
+  it("shows pipeline progress instead of the composer during a first run", () => {
+    mockJobs = [];
+    mockSelectedJob = null;
+    mockIsPipelineRunning = true;
+    window.matchMedia = createMatchMedia(
+      true,
+    ) as unknown as typeof window.matchMedia;
+
+    render(
+      <MemoryRouter initialEntries={["/jobs/ready"]}>
+        <Routes>
+          <Route path="/jobs/:tab" element={<OrchestratorPage />} />
+          <Route path="/jobs/:tab/:jobId" element={<OrchestratorPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("summary")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", {
+        name: /what kind of jobs are you looking for\?/i,
+      }),
+    ).not.toBeInTheDocument();
+  });
+
   it("opens manual import from the first-run search composer state", () => {
     mockJobs = [];
     mockSelectedJob = null;
@@ -1208,6 +1288,8 @@ describe("OrchestratorPage", () => {
       runBudget: 150,
       country: "united kingdom",
       cityLocations: ["London", "Manchester"],
+      locationMode: "cities",
+      proximity: null,
       workplaceTypes: ["remote", "hybrid", "onsite"],
       searchScope: "selected_only",
       matchStrictness: "exact_only",
@@ -1247,6 +1329,8 @@ describe("OrchestratorPage", () => {
       runBudget: 150,
       country: "united kingdom",
       cityLocations: ["Leeds", "Manchester"],
+      locationMode: "cities",
+      proximity: null,
       workplaceTypes: ["remote", "hybrid", "onsite"],
       searchScope: "selected_only",
       matchStrictness: "exact_only",
@@ -1286,6 +1370,8 @@ describe("OrchestratorPage", () => {
       runBudget: 150,
       country: "united kingdom",
       cityLocations: ["Leeds", "Manchester"],
+      locationMode: "cities",
+      proximity: null,
       workplaceTypes: ["remote", "hybrid", "onsite"],
       searchScope: "selected_only",
       matchStrictness: "exact_only",
@@ -1397,6 +1483,8 @@ describe("OrchestratorPage", () => {
       runBudget: 150,
       country: "united states",
       cityLocations: [],
+      locationMode: "cities",
+      proximity: null,
       workplaceTypes: ["remote", "hybrid", "onsite"],
       searchScope: "selected_only",
       matchStrictness: "exact_only",
@@ -1509,6 +1597,35 @@ describe("OrchestratorPage", () => {
     await waitFor(() => {
       expect(locationText()).toContain("/all");
     });
+  });
+
+  it("opens the listing from summary data while full job details load", () => {
+    window.matchMedia = createMatchMedia(
+      true,
+    ) as unknown as typeof window.matchMedia;
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+    mockSelectedJob = null;
+    mockSelectedJobListItemOverride = job2;
+    mockSelectedJobLoadState = "loading";
+
+    render(
+      <MemoryRouter initialEntries={["/jobs/discovered/job-2"]}>
+        <Routes>
+          <Route path="/jobs/:tab/:jobId" element={<OrchestratorPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    pressKey("o");
+
+    expect(openSpy).toHaveBeenCalledWith(
+      job2.applicationLink,
+      "_blank",
+      "noopener,noreferrer",
+    );
+    pressKey("r");
+    expect(api.processJob).not.toHaveBeenCalled();
+    openSpy.mockRestore();
   });
 
   it("triggers skip, mark applied, and move-to-ready actions from shortcuts", async () => {

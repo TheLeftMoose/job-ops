@@ -3,15 +3,28 @@ import type { PipelineSearchPresetConfig } from "@shared/types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { startServer, stopServer } from "./test-utils";
 
-const { mockCallJson } = vi.hoisted(() => ({
-  mockCallJson: vi.fn(),
-}));
+const { mockCallJson, mockResolveCountryAtPoint, mockResolveNearbyPlaceNames } =
+  vi.hoisted(() => ({
+    mockCallJson: vi.fn(),
+    mockResolveCountryAtPoint: vi.fn().mockResolvedValue("united kingdom"),
+    mockResolveNearbyPlaceNames: vi
+      .fn()
+      .mockResolvedValue(["Leeds", "Bradford"]),
+  }));
 
 vi.mock("@server/services/modelSelection", () => ({
   resolveLlmModel: vi.fn().mockResolvedValue("test-model"),
   createConfiguredLlmService: vi.fn().mockResolvedValue({
     callJson: mockCallJson,
   }),
+}));
+
+vi.mock("@server/services/proximity-search", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@server/services/proximity-search")
+  >()),
+  resolveCountryAtPoint: mockResolveCountryAtPoint,
+  resolveNearbyPlaceNames: mockResolveNearbyPlaceNames,
 }));
 
 describe.sequential("Pipeline API routes", () => {
@@ -35,6 +48,53 @@ describe.sequential("Pipeline API routes", () => {
     expect(body.ok).toBe(true);
     expect(body.data.isRunning).toBe(false);
     expect(body.data.lastRun).toBeNull();
+  });
+
+  it("detects the country at a selected map point", async () => {
+    const res = await fetch(`${baseUrl}/api/pipeline/location-country`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ latitude: 53.8, longitude: -1.55 }),
+    });
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body).toMatchObject({
+      ok: true,
+      data: { country: "united kingdom" },
+    });
+    expect(mockResolveCountryAtPoint).toHaveBeenCalledWith({
+      latitude: 53.8,
+      longitude: -1.55,
+    });
+
+    const invalidRes = await fetch(`${baseUrl}/api/pipeline/location-country`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ latitude: 100, longitude: -1.55 }),
+    });
+    expect(invalidRes.status).toBe(400);
+  });
+
+  it("previews named locations in a selected map area", async () => {
+    const proximity = {
+      latitude: 53.8,
+      longitude: -1.55,
+      radiusMiles: 25,
+    };
+    const res = await fetch(`${baseUrl}/api/pipeline/location-area-preview`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(proximity),
+    });
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body).toMatchObject({
+      ok: true,
+      data: { locations: ["Leeds", "Bradford"] },
+    });
+    expect(mockResolveNearbyPlaceNames).toHaveBeenCalledWith(proximity);
   });
 
   it("returns the current pipeline progress snapshot in the API envelope", async () => {
@@ -123,6 +183,8 @@ describe.sequential("Pipeline API routes", () => {
       sources: ["linkedin"],
       country: "united kingdom",
       cityLocations: ["London"],
+      locationMode: "cities",
+      proximity: null,
       workplaceTypes: ["remote", "hybrid"],
       searchScope: "selected_only",
       matchStrictness: "exact_only",
@@ -148,7 +210,10 @@ describe.sequential("Pipeline API routes", () => {
       expect.objectContaining({
         id: expect.any(String),
         name: "London backend",
-        config,
+        config: {
+          ...config,
+          runBudget: 300,
+        },
         lastUsedAt: null,
       }),
     );
@@ -314,6 +379,8 @@ describe.sequential("Pipeline API routes", () => {
       sources: ["linkedin"],
       country: "united kingdom",
       cityLocations: ["London"],
+      locationMode: "cities",
+      proximity: null,
       workplaceTypes: ["remote", "hybrid"],
       searchScope: "selected_only",
       matchStrictness: "exact_only",
@@ -344,7 +411,10 @@ describe.sequential("Pipeline API routes", () => {
     expect(body.data).toEqual(
       expect.objectContaining({
         source: "fallback",
-        config: currentConfig,
+        config: {
+          ...currentConfig,
+          runBudget: 300,
+        },
       }),
     );
     expect(JSON.stringify(body)).not.toContain("super secret prompt");
@@ -670,6 +740,7 @@ describe.sequential("Pipeline API routes", () => {
         minSuitabilityScore: 65,
         sources: ["gradcracker"],
         scoringInstructions: "Prefer backend API roles above GBP 60k.",
+        runBudget: 300,
         locationIntent: expect.objectContaining({
           selectedCountry: "united kingdom",
           country: "united kingdom",
@@ -680,6 +751,9 @@ describe.sequential("Pipeline API routes", () => {
           matchStrictness: "flexible",
         }),
       }),
+      expect.objectContaining({
+        hostedUsageReservationId: null,
+      }),
     );
     expect(trackCanonicalActivationEvent).toHaveBeenCalledWith(
       "jobs_pipeline_run_started",
@@ -688,6 +762,7 @@ describe.sequential("Pipeline API routes", () => {
         selected_sources: "gradcracker",
         top_n: 5,
         min_suitability_score: 65,
+        run_budget: 300,
         country: "united kingdom",
         has_city_locations: true,
         search_terms_count: 1,
@@ -731,6 +806,9 @@ describe.sequential("Pipeline API routes", () => {
           matchStrictness: "exact_only",
         }),
       }),
+      expect.objectContaining({
+        hostedUsageReservationId: null,
+      }),
     );
 
     const naukriRunRes = await fetch(`${baseUrl}/api/pipeline/run`, {
@@ -752,6 +830,9 @@ describe.sequential("Pipeline API routes", () => {
           country: "india",
         }),
       }),
+      expect.objectContaining({
+        hostedUsageReservationId: null,
+      }),
     );
 
     const blockedNaukriRes = await fetch(`${baseUrl}/api/pipeline/run`, {
@@ -766,6 +847,77 @@ describe.sequential("Pipeline API routes", () => {
     expect(blockedNaukriRes.status).toBe(400);
     expect(blockedNaukriBody.ok).toBe(false);
     expect(blockedNaukriBody.error.message).toContain("incompatible");
+  });
+
+  it("returns a standard quota error when hosted pipeline runs are exhausted", async () => {
+    await stopServer({ server, closeDb, tempDir });
+    ({ server, baseUrl, closeDb, tempDir } = await startServer({
+      env: {
+        JOBOPS_APP_MODE: "hosted",
+        JOBOPS_HOSTED_TENANT_ID: "tenant_default",
+        JOBOPS_HOSTED_QUOTAS_ENABLED: "true",
+      },
+    }));
+
+    const { runWithRequestContext } = await import(
+      "@server/infra/request-context"
+    );
+    const { db, schema } = await import("@server/db");
+    const usage = await import("@server/services/hosted-usage");
+
+    await db
+      .insert(schema.users)
+      .values({
+        id: "test-user",
+        username: "test-user",
+        displayName: "Test User",
+        passwordHash: "hash",
+        passwordSalt: "salt",
+      })
+      .onConflictDoNothing()
+      .run();
+    await db
+      .insert(schema.tenantMemberships)
+      .values({
+        id: "membership-test-user",
+        userId: "test-user",
+        tenantId: "tenant_default",
+        role: "member",
+      })
+      .onConflictDoNothing()
+      .run();
+
+    await runWithRequestContext(
+      {
+        requestId: "seed-quota",
+        tenantId: "tenant_default",
+        userId: "test-user",
+        username: "test-user",
+      },
+      () => usage.consumeHostedUsage({ action: "pipeline_run", units: 25 }),
+    );
+
+    const res = await fetch(`${baseUrl}/api/pipeline/run`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-request-id": "quota-pipeline-run",
+      },
+      body: JSON.stringify({ sources: ["gradcracker"] }),
+    });
+    const body = await res.json();
+
+    expect(res.status).toBe(422);
+    expect(body.ok).toBe(false);
+    expect(body.error.code).toBe("UNPROCESSABLE_ENTITY");
+    expect(body.error.details).toMatchObject({
+      action: "pipeline_run",
+      limit: 25,
+      used: 25,
+      reserved: 0,
+      requested: 1,
+    });
+    expect(body.meta.requestId).toBe("quota-pipeline-run");
   });
 
   it("forwards Watchlist source filter to the pipeline runner (#621)", async () => {
@@ -796,6 +948,9 @@ describe.sequential("Pipeline API routes", () => {
     expect(runPipeline).toHaveBeenCalledWith(
       expect.objectContaining({
         watchlistSelectedSourceIds: ["watchlist-a", "watchlist-b"],
+      }),
+      expect.objectContaining({
+        hostedUsageReservationId: null,
       }),
     );
     // Analytics records the count only — never raw IDs (tenant safety).

@@ -23,6 +23,11 @@ import { getDataDir } from "../config/dataDir";
 import * as jobsRepo from "../repositories/jobs";
 import * as pipelineRepo from "../repositories/pipeline";
 import * as settingsRepo from "../repositories/settings";
+import {
+  refundHostedUsageReservation,
+  reserveHostedUsage,
+  settleHostedUsageReservation,
+} from "../services/hosted-usage";
 import { generatePdf } from "../services/pdf";
 import {
   createJobPdfFingerprint,
@@ -151,6 +156,16 @@ async function resolveLocationIntent(
     workplaceTypes: parseWorkplaceTypes(settings.workplaceTypes),
     searchScope: settings.locationSearchScope,
     matchStrictness: settings.locationMatchStrictness,
+    proximity:
+      settings.locationSearchMode === "radius" &&
+      settings.locationLatitude != null &&
+      settings.locationLongitude != null
+        ? {
+            latitude: Number(settings.locationLatitude),
+            longitude: Number(settings.locationLongitude),
+            radiusMiles: Number(settings.locationRadiusMiles ?? 50),
+          }
+        : null,
   });
 }
 
@@ -249,6 +264,7 @@ function buildRepeatedChallengeMessage(args: {
  */
 export async function runPipeline(
   config: Partial<PipelineConfig> = {},
+  options?: { hostedUsageReservationId?: string | null },
 ): Promise<{
   success: boolean;
   jobsDiscovered: number;
@@ -258,6 +274,12 @@ export async function runPipeline(
   const scopeKey = getPipelineScopeKey();
   const tenantState = getPipelineState(scopeKey);
   if (tenantState.isRunning) {
+    if (options?.hostedUsageReservationId) {
+      await settleHostedUsageReservation({
+        reservationId: options.hostedUsageReservationId,
+        usedUnits: 0,
+      });
+    }
     return {
       success: false,
       jobsDiscovered: 0,
@@ -296,6 +318,7 @@ export async function runPipeline(
     const pipelineLogger = logger.child({ pipelineRunId: pipelineRun.id });
     let jobsDiscovered = 0;
     let jobsProcessed = 0;
+    let pipelineUsageUnits = 0;
     let resultSummary =
       savedDetails?.resultSummary ?? createPipelineRunResultSummary();
     const persistResultSummary = async (
@@ -310,7 +333,12 @@ export async function runPipeline(
       topN: mergedConfig.topN,
       minSuitabilityScore: mergedConfig.minSuitabilityScore,
       sources: mergedConfig.sources,
-      locationIntent: mergedConfig.locationIntent,
+      locationIntent: {
+        selectedCountry: locationIntent.selectedCountry,
+        cityCount: locationIntent.cityLocations.length,
+        radiusMiles: locationIntent.proximity?.radiusMiles ?? null,
+        hasProximity: Boolean(locationIntent.proximity),
+      },
     });
 
     try {
@@ -372,6 +400,8 @@ export async function runPipeline(
         const retryResult = await discoverJobsStep({
           mergedConfig: retryConfig,
           includeWatchlist: false,
+          preserveFanout: true,
+          fanoutSeedJobs: discoveredJobs,
           shouldCancel: () =>
             getPipelineState(scopeKey).cancelRequestedAt !== null,
         });
@@ -425,6 +455,7 @@ export async function runPipeline(
         ({ unprocessedJobs, scoredJobs } = await scoreJobsStep({
           profile,
           scoringInstructions: mergedConfig.scoringInstructions,
+          visaSponsorCountryKey: mergedConfig.locationIntent?.selectedCountry,
           shouldCancel: () =>
             getPipelineState(scopeKey).cancelRequestedAt !== null,
         }));
@@ -446,6 +477,7 @@ export async function runPipeline(
           ({ unprocessedJobs, scoredJobs } = await scoreJobsStep({
             profile,
             scoringInstructions: mergedConfig.scoringInstructions,
+            visaSponsorCountryKey: mergedConfig.locationIntent?.selectedCountry,
             shouldCancel: () =>
               getPipelineState(scopeKey).cancelRequestedAt !== null,
           }));
@@ -515,6 +547,7 @@ export async function runPipeline(
         jobsProcessed: processedCount,
       });
 
+      pipelineUsageUnits = 1;
       return {
         success: true,
         jobsDiscovered,
@@ -573,6 +606,12 @@ export async function runPipeline(
       tenantState.cancelRequestedAt = null;
       tenantState.activeChallengeState = null;
       tenantState.activeLlmConfigState = null;
+      if (options?.hostedUsageReservationId) {
+        await settleHostedUsageReservation({
+          reservationId: options.hostedUsageReservationId,
+          usedUnits: pipelineUsageUnits,
+        });
+      }
     }
   });
 }
@@ -602,6 +641,27 @@ export async function summarizeJob(
   return runWithRequestContext({ jobId }, async () => {
     const jobLogger = logger.child({ jobId });
     jobLogger.info("Summarizing job");
+    let tailoringReservationId: string | null | undefined;
+    let tailoringUsageSucceeded = false;
+    const reserveTailoringUsage = async () => {
+      if (tailoringReservationId !== undefined) return;
+      const reserved = await reserveHostedUsage({ action: "tailoring" });
+      tailoringReservationId = reserved.reservation?.id ?? null;
+    };
+    const settleTailoringUsage = async () => {
+      if (!tailoringReservationId) return;
+      await settleHostedUsageReservation({
+        reservationId: tailoringReservationId,
+        usedUnits: tailoringUsageSucceeded ? 1 : 0,
+      });
+      tailoringReservationId = null;
+    };
+    const refundTailoringUsage = async () => {
+      if (!tailoringReservationId) return;
+      await refundHostedUsageReservation(tailoringReservationId);
+      tailoringReservationId = null;
+    };
+
     try {
       const job = await jobsRepo.getJobById(jobId);
       if (!job) return { success: false, error: "Job not found" };
@@ -628,11 +688,13 @@ export async function summarizeJob(
         (!tailoredSummary || !tailoredHeadline || options?.force)
       ) {
         jobLogger.info("Generating tailoring content");
+        await reserveTailoringUsage();
         const tailoringResult = await generateTailoring(
           job.jobDescription || "",
           profile,
         );
         if (tailoringResult.success && tailoringResult.data) {
+          tailoringUsageSucceeded = true;
           if (shouldUpdateSummary) {
             tailoredSummary = tailoringResult.data.summary;
           }
@@ -647,6 +709,7 @@ export async function summarizeJob(
           (shouldUpdateSummary && !tailoredSummary) ||
           (shouldUpdateHeadline && !tailoredHeadline)
         ) {
+          await settleTailoringUsage();
           return {
             success: false,
             error: `Tailoring failed: ${tailoringResult.error || "unknown error"}`,
@@ -700,12 +763,14 @@ export async function summarizeJob(
           if (existingSelectionValid && !options?.force) {
             selectedProjectIds = existingSelectedProjectIds.join(",");
           } else {
+            await reserveTailoringUsage();
             const picked = await pickProjectIdsForJob({
               jobDescription: job.jobDescription || "",
               eligibleProjects,
               desiredCount,
             });
 
+            tailoringUsageSucceeded = true;
             selectedProjectIds = [...locked, ...picked].join(",");
           }
         } catch (error) {
@@ -728,8 +793,10 @@ export async function summarizeJob(
           : {}),
       });
 
+      await settleTailoringUsage();
       return { success: true };
     } catch (error) {
+      await refundTailoringUsage();
       const message = error instanceof Error ? error.message : "Unknown error";
       jobLogger.error("Summarization failed", error);
       return { success: false, error: message };
@@ -753,6 +820,26 @@ export async function generateFinalPdf(
     jobLogger.info("Generating final PDF");
     let jobStatusToRestore: JobStatus | null = null;
     let pdfRegeneratingMarked = false;
+    let pdfReservationId: string | null | undefined;
+    const reservePdfUsage = async () => {
+      if (pdfReservationId !== undefined) return;
+      const reserved = await reserveHostedUsage({ action: "pdf_export" });
+      pdfReservationId = reserved.reservation?.id ?? null;
+    };
+    const settlePdfUsage = async (usedUnits: number) => {
+      if (!pdfReservationId) return;
+      await settleHostedUsageReservation({
+        reservationId: pdfReservationId,
+        usedUnits,
+      });
+      pdfReservationId = null;
+    };
+    const refundPdfUsage = async () => {
+      if (!pdfReservationId) return;
+      await refundHostedUsageReservation(pdfReservationId);
+      pdfReservationId = null;
+    };
+
     try {
       const job = await jobsRepo.getJobById(jobId);
       if (!job) return { success: false, error: "Job not found" };
@@ -765,6 +852,7 @@ export async function generateFinalPdf(
         };
       }
       jobStatusToRestore = job.status;
+      await reservePdfUsage();
 
       // Ready jobs already have a usable PDF; keep them visible while regenerating.
       if (job.status !== "ready") {
@@ -800,6 +888,7 @@ export async function generateFinalPdf(
           pdfRegenerating: false,
         });
         pdfRegeneratingMarked = false;
+        await settlePdfUsage(0);
         const preservedPdfMessage =
           job.status === "ready" && job.pdfPath
             ? " Your previous resume PDF is still available."
@@ -839,6 +928,7 @@ export async function generateFinalPdf(
           await jobsRepo.updateJob(job.id, { pdfRegenerating: false });
         }
         pdfRegeneratingMarked = false;
+        await settlePdfUsage(0);
         return {
           success: false,
           error: "PDF generation was superseded by newer job changes.",
@@ -883,8 +973,10 @@ export async function generateFinalPdf(
         );
       }
 
+      await settlePdfUsage(1);
       return { success: true };
     } catch (error) {
+      await refundPdfUsage();
       const message = error instanceof Error ? error.message : "Unknown error";
       if (jobStatusToRestore || pdfRegeneratingMarked) {
         try {

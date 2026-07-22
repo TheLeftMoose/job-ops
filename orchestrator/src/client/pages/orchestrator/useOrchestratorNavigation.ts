@@ -16,6 +16,9 @@ const commandSelectionFilterKeys = [
   "appliedRange",
   "appliedStart",
   "appliedEnd",
+  "postedWithin",
+  "employment",
+  "location",
 ];
 
 interface UseOrchestratorNavigationArgs {

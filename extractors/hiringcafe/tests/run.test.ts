@@ -70,6 +70,22 @@ function createJobDetailHtml(job: unknown): string {
   `;
 }
 
+function createExpiredJobDetailHtml(): string {
+  return `
+    <!doctype html>
+    <html>
+      <head>
+        <title>HiringCafe - Expired Job</title>
+      </head>
+      <body>
+        <h1>Expired Job</h1>
+        <p>We're sorry, but this job has expired.</p>
+        <script>window.__hcAsset = "challenge-platform";</script>
+      </body>
+    </html>
+  `;
+}
+
 function createRawJob(overrides: Record<string, unknown> = {}) {
   return {
     original_source_id: "job-1",
@@ -123,6 +139,12 @@ describe("Hiring Cafe SSR parser", () => {
         description: "<p>Full job description.</p>",
       }),
     });
+  });
+
+  it("returns null for an expired detail page", () => {
+    expect(
+      parseHiringCafeJobDetailPage(createExpiredJobDetailHtml()),
+    ).toBeNull();
   });
 
   it("builds the public search URL with url-encoded JSON state", () => {
@@ -240,7 +262,7 @@ describe("runHiringCafe", () => {
     const fetchMock = vi.fn((url: string) => {
       if (url === "https://hiring.cafe/job/req-1") {
         return Promise.resolve(
-          createTextResponse("<html>cloudflare challenge-platform</html>"),
+          createTextResponse("<html>challenges.cloudflare.com</html>"),
         );
       }
 
@@ -258,6 +280,42 @@ describe("runHiringCafe", () => {
       success: false,
       challengeRequired: "https://hiring.cafe/job/req-1",
     });
+  });
+
+  it("falls back to the search hit when enrichment finds an expired job", async () => {
+    const searchHit = createRawJob({
+      requisition_id: "req-1",
+      job_information: {
+        title: "Web Developer",
+      },
+    });
+    const fetchMock = vi.fn((url: string) => {
+      if (url === "https://hiring.cafe/job/req-1") {
+        return Promise.resolve(
+          createTextResponse(createExpiredJobDetailHtml()),
+        );
+      }
+
+      return Promise.resolve(createTextResponse(createSearchHtml([searchHit])));
+    });
+
+    const result = await runHiringCafe({
+      searchTerms: ["web developer"],
+      country: "worldwide",
+      maxJobsPerTerm: 1,
+      fetchImpl: fetchMock as typeof fetch,
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      jobs: [
+        expect.objectContaining({
+          sourceJobId: "job-1",
+          title: "Web Developer",
+        }),
+      ],
+    });
+    expect(result.challengeRequired).toBeUndefined();
   });
 
   it("serializes locality search state for strict city filters", async () => {
@@ -305,6 +363,48 @@ describe("runHiringCafe", () => {
         radius_unit: "miles",
         ignore_radius: false,
       },
+    });
+  });
+
+  it("serializes the selected map point and radius without geocoding a city", async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(createTextResponse(createSearchHtml([]))),
+    );
+
+    await runHiringCafe({
+      searchTerms: ["web developer"],
+      country: "United Kingdom",
+      countryKey: "united kingdom",
+      locations: ["Leeds"],
+      proximity: {
+        latitude: 53.8008,
+        longitude: -1.5491,
+        radiusMiles: 30,
+      },
+      maxJobsPerTerm: 1,
+      fetchImpl: fetchMock as typeof fetch,
+    });
+
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        String(url).startsWith("https://nominatim.openstreetmap.org/search"),
+      ),
+    ).toBe(false);
+    const searchCall = fetchMock.mock.calls.find(([url]) =>
+      String(url).startsWith("https://hiring.cafe/"),
+    );
+    const url = new URL(String(searchCall?.[0]));
+    const searchState = JSON.parse(
+      url.searchParams.get("searchState") ?? "{}",
+    ) as Record<string, unknown>;
+    const locations = searchState.locations as Array<{
+      geometry?: { location?: { lat?: number; lon?: number } };
+      options?: { radius?: number; radius_unit?: string };
+    }>;
+
+    expect(locations[0]).toMatchObject({
+      geometry: { location: { lat: 53.8008, lon: -1.5491 } },
+      options: { radius: 30, radius_unit: "miles" },
     });
   });
 });

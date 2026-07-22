@@ -40,6 +40,11 @@ const mocks = vi.hoisted(() => ({
     getAllSettings: vi.fn(),
   },
   resolveLlmRuntimeSettings: vi.fn(),
+  hostedUsage: {
+    reserveHostedUsage: vi.fn(),
+    settleHostedUsageReservation: vi.fn(),
+    refundHostedUsageReservation: vi.fn(),
+  },
 }));
 
 vi.mock("@infra/logger", () => ({
@@ -102,6 +107,12 @@ vi.mock("./post-application/job-emails", () => ({
 
 vi.mock("./modelSelection", () => ({
   resolveLlmRuntimeSettings: mocks.resolveLlmRuntimeSettings,
+}));
+
+vi.mock("./hosted-usage", () => ({
+  reserveHostedUsage: mocks.hostedUsage.reserveHostedUsage,
+  settleHostedUsageReservation: mocks.hostedUsage.settleHostedUsageReservation,
+  refundHostedUsageReservation: mocks.hostedUsage.refundHostedUsageReservation,
 }));
 
 vi.mock("./llm/service", () => ({
@@ -179,6 +190,12 @@ describe("ghostwriter service", () => {
       baseUrl: null,
       apiKey: "test-key",
     });
+    mocks.hostedUsage.reserveHostedUsage.mockResolvedValue({
+      allowance: { quotasEnabled: true },
+      reservation: { id: "usage-reservation-1", reservedUnits: 1 },
+    });
+    mocks.hostedUsage.settleHostedUsageReservation.mockResolvedValue({});
+    mocks.hostedUsage.refundHostedUsageReservation.mockResolvedValue({});
     mocks.buildJobChatPromptContext.mockResolvedValue({
       job: { id: "job-1" },
       style: {
@@ -322,6 +339,32 @@ describe("ghostwriter service", () => {
           message.role !== "system" && message.role !== "user",
       ),
     ).toEqual([{ role: "assistant", content: "Draft response" }]);
+    expect(mocks.hostedUsage.reserveHostedUsage).toHaveBeenCalledWith({
+      action: "ghostwriter",
+    });
+    expect(mocks.hostedUsage.settleHostedUsageReservation).toHaveBeenCalledWith(
+      {
+        reservationId: "usage-reservation-1",
+        usedUnits: 1,
+      },
+    );
+  });
+
+  it("does not persist a user message when Ghostwriter quota is exhausted", async () => {
+    mocks.hostedUsage.reserveHostedUsage.mockRejectedValueOnce(
+      new Error("Monthly usage quota exceeded"),
+    );
+
+    await expect(
+      sendMessageForJob({
+        jobId: "job-1",
+        content: "Tell me about this role",
+      }),
+    ).rejects.toThrow("Monthly usage quota exceeded");
+
+    expect(mocks.repo.createMessage).not.toHaveBeenCalled();
+    expect(mocks.repo.setActiveChild).not.toHaveBeenCalled();
+    expect(mocks.repo.setActiveRoot).not.toHaveBeenCalled();
   });
 
   it("saves selected notes before building prompt context", async () => {
@@ -596,7 +639,13 @@ describe("ghostwriter service", () => {
     });
   });
 
-  it("passes screenshot attachments as image input when the model supports them", async () => {
+  it("passes screenshot attachments as image input to Claude CLI", async () => {
+    mocks.resolveLlmRuntimeSettings.mockResolvedValue({
+      model: "sonnet",
+      provider: "claude_cli",
+      baseUrl: null,
+      apiKey: null,
+    });
     const assistantPartial: JobChatMessage = {
       ...baseAssistantMessage,
       id: "assistant-with-image",
@@ -654,6 +703,11 @@ describe("ghostwriter service", () => {
         name: "form.png",
       },
     ]);
+    expect(
+      mocks.llmCallJson.mock.calls[0][0].jsonSchema.schema.properties.response,
+    ).toMatchObject({
+      description: expect.stringContaining("Do not serialize JSON"),
+    });
   });
 
   it("rejects screenshots before running when the selected model is text-only", async () => {
@@ -893,6 +947,9 @@ describe("ghostwriter service", () => {
       errorMessage:
         "LLM response structure was invalid: missing 'response' property",
     });
+    expect(mocks.hostedUsage.refundHostedUsageReservation).toHaveBeenCalledWith(
+      "usage-reservation-1",
+    );
   });
 
   it("cancels a running generation during streaming", async () => {
@@ -968,6 +1025,12 @@ describe("ghostwriter service", () => {
     expect(onCancelled).toHaveBeenCalled();
     expect(onCompleted).not.toHaveBeenCalled();
     expect(result.assistantMessage?.status).toBe("cancelled");
+    expect(mocks.hostedUsage.settleHostedUsageReservation).toHaveBeenCalledWith(
+      {
+        reservationId: "usage-reservation-1",
+        usedUnits: 0,
+      },
+    );
   });
 
   it("regenerates any assistant message, not just the latest", async () => {

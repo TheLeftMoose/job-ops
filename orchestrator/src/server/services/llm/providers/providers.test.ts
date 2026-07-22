@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { anthropicStrategy } from "./anthropic";
 import { geminiStrategy } from "./gemini";
 import { glmStrategy } from "./glm";
 import { lmStudioStrategy } from "./lmstudio";
@@ -6,6 +7,7 @@ import { ollamaStrategy } from "./ollama";
 import { openAiStrategy } from "./openai";
 import { openAiCompatibleStrategy } from "./openai-compatible";
 import { openRouterStrategy } from "./openrouter";
+import { requestyStrategy } from "./requesty";
 
 const schema = {
   name: "test_schema",
@@ -35,6 +37,18 @@ describe("provider adapters", () => {
         expectedResponseFormat: "json_schema",
       },
       {
+        name: "requesty-json_schema",
+        strategy: requestyStrategy,
+        args: {
+          mode: "json_schema" as const,
+          baseUrl: "https://router.requesty.ai/v1",
+          apiKey: "x",
+          model: "openai/gpt-4o-mini",
+        },
+        expectedUrl: "https://router.requesty.ai/v1/chat/completions",
+        expectedResponseFormat: "json_schema",
+      },
+      {
         name: "openai-json_object",
         strategy: openAiStrategy,
         args: {
@@ -44,6 +58,17 @@ describe("provider adapters", () => {
           model: "model-a",
         },
         expectedUrl: "https://api.openai.com/v1/responses",
+      },
+      {
+        name: "anthropic-json_schema",
+        strategy: anthropicStrategy,
+        args: {
+          mode: "json_schema" as const,
+          baseUrl: "https://api.anthropic.com",
+          apiKey: "x",
+          model: "claude-sonnet-4-6",
+        },
+        expectedUrl: "https://api.anthropic.com/v1/messages",
       },
       {
         name: "openai-compatible-json_object",
@@ -172,6 +197,7 @@ describe("provider adapters", () => {
       choices: [{ message: { content: "ok" } }],
     };
     expect(openRouterStrategy.extractText(response)).toBe("ok");
+    expect(requestyStrategy.extractText(response)).toBe("ok");
     expect(glmStrategy.extractText(response)).toBe("ok");
     expect(lmStudioStrategy.extractText(response)).toBe("ok");
     expect(ollamaStrategy.extractText(response)).toBe("ok");
@@ -230,6 +256,15 @@ describe("provider adapters", () => {
     expect(openAiStrategy.extractText({ output_text: "openai-direct" })).toBe(
       "openai-direct",
     );
+    expect(
+      anthropicStrategy.extractText({
+        content: [
+          { type: "text", text: "hello " },
+          { type: "thinking", thinking: "hidden" },
+          { type: "text", text: "claude" },
+        ],
+      }),
+    ).toBe("hello claude");
     expect(
       openAiStrategy.extractText({
         output: [
@@ -305,5 +340,113 @@ describe("provider adapters", () => {
     ]);
     expect(itemSchema.additionalProperties).toBeUndefined();
     expect(itemSchema.propertyOrdering).toEqual(["name", "keywords"]);
+  });
+
+  it("builds native Anthropic Messages API requests", () => {
+    const request = anthropicStrategy.buildRequest({
+      mode: "json_schema",
+      baseUrl: "https://api.anthropic.com",
+      apiKey: "sk-ant",
+      model: "claude-sonnet-4-6",
+      messages: [
+        { role: "system", content: "You are concise." },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Read this image." },
+            {
+              type: "image",
+              imageUrl: "data:image/png;base64,abc123",
+              mediaType: "image/png",
+            },
+          ],
+        },
+      ],
+      jsonSchema: schema,
+    });
+
+    expect(request.url).toBe("https://api.anthropic.com/v1/messages");
+    expect(request.headers).toMatchObject({
+      "anthropic-version": "2023-06-01",
+      "x-api-key": "sk-ant",
+    });
+    expect(request.headers).not.toHaveProperty("Authorization");
+    expect(request.body).toMatchObject({
+      model: "claude-sonnet-4-6",
+      max_tokens: 4096,
+      system: "You are concise.",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Read this image." },
+            {
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: "image/png",
+                data: "abc123",
+              },
+            },
+          ],
+        },
+      ],
+      output_config: {
+        format: {
+          type: "json_schema",
+          schema: schema.schema,
+        },
+      },
+    });
+  });
+
+  it("strips JSON Schema keywords Anthropic does not support", () => {
+    const request = anthropicStrategy.buildRequest({
+      mode: "json_schema",
+      baseUrl: "https://api.anthropic.com",
+      apiKey: "sk-ant",
+      model: "claude-sonnet-4-6",
+      messages: [{ role: "user", content: "hi" }],
+      jsonSchema: {
+        name: "job_brief",
+        schema: {
+          type: "object",
+          properties: {
+            they_want: {
+              type: "array",
+              maxItems: 6,
+              minItems: 1,
+              items: { type: "string", maxLength: 200 },
+            },
+            // A property legitimately named like a stripped keyword must survive.
+            format: { type: "string" },
+          },
+          required: ["they_want"],
+          additionalProperties: false,
+        },
+      },
+    });
+
+    const sentSchema = (
+      request.body as {
+        output_config: { format: { schema: Record<string, unknown> } };
+      }
+    ).output_config.format.schema;
+    const properties = sentSchema.properties as Record<
+      string,
+      Record<string, unknown>
+    >;
+
+    expect(properties.they_want).not.toHaveProperty("maxItems");
+    expect(properties.they_want).not.toHaveProperty("minItems");
+    expect(properties.they_want.items).not.toHaveProperty("maxLength");
+    // The nested array type and its items are still present.
+    expect(properties.they_want).toMatchObject({
+      type: "array",
+      items: { type: "string" },
+    });
+    // A property whose name collides with a stripped keyword is preserved.
+    expect(properties).toHaveProperty("format");
+    expect(properties.format).toMatchObject({ type: "string" });
   });
 });

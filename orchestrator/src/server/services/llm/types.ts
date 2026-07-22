@@ -1,12 +1,15 @@
 export type LlmProvider =
   | "openrouter"
+  | "requesty"
   | "lmstudio"
   | "ollama"
   | "openai"
+  | "anthropic"
   | "openai_compatible"
   | "glm"
   | "gemini"
   | "gemini_cli"
+  | "claude_cli"
   | "codex";
 
 export type ResponseMode = "json_schema" | "json_object" | "text" | "none";

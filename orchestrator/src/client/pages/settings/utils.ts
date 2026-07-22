@@ -22,40 +22,51 @@ export const formatSecretHint = (hint: string | null) =>
 
 export const LLM_PROVIDERS = [
   "openrouter",
+  "requesty",
   "lmstudio",
   "ollama",
   "openai",
+  "anthropic",
   "openai_compatible",
   "glm",
   "gemini",
   "gemini_cli",
+  "claude_cli",
   "codex",
 ] as const;
 
 export type LlmProviderId = (typeof LLM_PROVIDERS)[number];
 export const LLM_MODEL_SUGGESTION_PROVIDERS = [
   "openai",
+  "anthropic",
   "glm",
   "gemini",
   "gemini_cli",
+  "claude_cli",
   "ollama",
+  "requesty",
 ] as const;
 
 export const LLM_PROVIDER_LABELS: Record<LlmProviderId, string> = {
   openrouter: "OpenRouter",
+  requesty: "Requesty",
   lmstudio: "LM Studio",
   ollama: "Ollama",
   openai: "OpenAI",
+  anthropic: "Claude (Anthropic)",
   openai_compatible: "OpenAI-compatible",
   glm: "GLM",
   gemini: "Gemini",
   gemini_cli: "Gemini (CLI)",
+  claude_cli: "Claude (CLI)",
   codex: "Codex",
 };
 
 const PROVIDERS_WITH_API_KEY = new Set<LlmProviderId>([
   "openrouter",
+  "requesty",
   "openai",
+  "anthropic",
   "openai_compatible",
   "glm",
   "gemini",
@@ -73,16 +84,22 @@ const PROVIDERS_WITH_BASE_URL = new Set<LlmProviderId>([
 const PROVIDER_HINTS: Record<LlmProviderId, string> = {
   openrouter:
     "OpenRouter uses your API key and supports model routing across providers.",
+  requesty:
+    "Requesty uses your API key and routes requests across providers through an OpenAI-compatible endpoint.",
   lmstudio: "LM Studio runs locally via its OpenAI-compatible server.",
   ollama:
     "Ollama typically runs locally. Add an API key only for Ollama-compatible endpoints protected by bearer auth.",
   openai: "OpenAI uses the Responses API with structured outputs.",
+  anthropic:
+    "Claude uses Anthropic's native Messages API with your Anthropic API key.",
   openai_compatible:
     "Use a bearer token with any chat-completions-compatible endpoint.",
   glm: "GLM uses the Z.AI chat completions API (OpenAI-compatible) with your API key.",
   gemini: "Gemini uses the native AI Studio API and requires a key.",
   gemini_cli:
     "Gemini (CLI) runs the official Google Gemini CLI on this host using your OAuth session or CLI API key — no JobOps LLM key.",
+  claude_cli:
+    "Claude (CLI) runs the official Claude Code CLI on this host using your subscription token or API key — no JobOps LLM key.",
   codex:
     "Codex runs through a local app-server process and uses your Codex login session.",
 };
@@ -95,6 +112,10 @@ const PROVIDER_KEY_HELPERS: Record<
     text: "Create a key at openrouter.ai",
     href: "https://openrouter.ai/keys",
   },
+  requesty: {
+    text: "Create a key at app.requesty.ai/api-keys",
+    href: "https://app.requesty.ai/api-keys",
+  },
   lmstudio: { text: "No API key required for LM Studio" },
   ollama: {
     text: "Optional bearer token for Ollama-compatible endpoints that require auth",
@@ -102,6 +123,10 @@ const PROVIDER_KEY_HELPERS: Record<
   openai: {
     text: "Create a key at platform.openai.com",
     href: "https://platform.openai.com/api-keys",
+  },
+  anthropic: {
+    text: "Create a key at platform.claude.com",
+    href: "https://platform.claude.com/settings/keys",
   },
   openai_compatible: {
     text: "Use the bearer token issued by your compatible provider",
@@ -116,6 +141,9 @@ const PROVIDER_KEY_HELPERS: Record<
   },
   gemini_cli: {
     text: "Authenticate with the Gemini CLI (gemini login / OAuth); see docs link below",
+  },
+  claude_cli: {
+    text: "Authenticate with the Claude CLI (claude setup-token); see docs link below",
   },
   codex: { text: "No API key required when Codex is authenticated locally" },
 };
@@ -141,6 +169,7 @@ export function normalizeLlmProvider(
   const normalized = value?.trim().toLowerCase();
   if (!normalized) return "openrouter";
   const normalizedId = normalized.replace(/[-.]/g, "_");
+  if (normalizedId === "claude") return "anthropic";
   if (normalizedId === "openai_compatible") return "openai_compatible";
   const mapped = mapGlmProviderAlias(normalizedId);
   return (LLM_PROVIDERS as readonly string[]).includes(mapped)

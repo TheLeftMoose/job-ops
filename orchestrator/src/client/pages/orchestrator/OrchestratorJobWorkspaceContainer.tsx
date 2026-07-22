@@ -13,6 +13,7 @@ import type { RunMode } from "./run-mode";
 import { useFilteredJobs } from "./useFilteredJobs";
 import { useJobSelectionActions } from "./useJobSelectionActions";
 import { useKeyboardShortcuts } from "./useKeyboardShortcuts";
+import type { SelectedJobLoadState } from "./useOrchestratorData";
 import type { useOrchestratorFilters } from "./useOrchestratorFilters";
 import type { useOrchestratorNavigation } from "./useOrchestratorNavigation";
 import type { useOrchestratorUiState } from "./useOrchestratorUiState";
@@ -22,6 +23,9 @@ import { getJobCounts, getSourcesWithJobs } from "./utils";
 interface OrchestratorJobWorkspaceContainerProps {
   jobs: JobListItem[];
   selectedJob: Job | null;
+  selectedJobListItem: JobListItem | null;
+  selectedJobLoadState: SelectedJobLoadState;
+  retrySelectedJob: () => void;
   stats: Record<JobStatus, number>;
   isLoading: boolean;
   isPipelineRunning: boolean;
@@ -38,6 +42,9 @@ export const OrchestratorJobWorkspaceContainer: React.FC<
 > = ({
   jobs,
   selectedJob,
+  selectedJobListItem,
+  selectedJobLoadState,
+  retrySelectedJob,
   stats,
   isLoading,
   isPipelineRunning,
@@ -49,15 +56,17 @@ export const OrchestratorJobWorkspaceContainer: React.FC<
   openRunMode,
 }) => {
   const jobListHandleRef = useRef<VirtualListHandle | null>(null);
-  const activeJobs = useFilteredJobs(
-    jobs,
-    navigation.activeTab,
-    filters.dateFilter,
-    filters.sourceFilter,
-    filters.sponsorFilter,
-    filters.salaryFilter,
-    filters.sort,
-  );
+  const activeJobs = useFilteredJobs(jobs, {
+    activeTab: navigation.activeTab,
+    dateFilter: filters.dateFilter,
+    sourceFilter: filters.sourceFilter,
+    sponsorFilter: filters.sponsorFilter,
+    salaryFilter: filters.salaryFilter,
+    postedWithinDays: filters.postedWithinDays,
+    employmentTypes: filters.employmentTypes,
+    location: filters.location,
+    sort: filters.sort,
+  });
   const counts = useMemo(() => getJobCounts(jobs), [jobs]);
   const sourcesWithJobs = useMemo(() => getSourcesWithJobs(jobs), [jobs]);
   const handleTabChange = useCallback(
@@ -71,6 +80,14 @@ export const OrchestratorJobWorkspaceContainer: React.FC<
     if (!tabDef || tabDef.statuses.length === 0) return selectedJob;
     return tabDef.statuses.includes(selectedJob.status) ? selectedJob : null;
   }, [navigation.activeTab, selectedJob]);
+  const visibleSelectedJobListItem = useMemo(() => {
+    if (!selectedJobListItem) return null;
+    const tabDef = tabs.find((tab) => tab.id === navigation.activeTab);
+    if (!tabDef || tabDef.statuses.length === 0) return selectedJobListItem;
+    return tabDef.statuses.includes(selectedJobListItem.status)
+      ? selectedJobListItem
+      : null;
+  }, [navigation.activeTab, selectedJobListItem]);
 
   const {
     selectedJobIds,
@@ -120,6 +137,7 @@ export const OrchestratorJobWorkspaceContainer: React.FC<
     activeJobs,
     selectedJobId: navigation.selectedJobId,
     selectedJob: visibleSelectedJob,
+    selectedJobSummary: visibleSelectedJobListItem,
     selectedJobIds,
     isDesktop: ui.isDesktop,
     handleSelectJobId: navigation.handleSelectJobId,
@@ -206,6 +224,10 @@ export const OrchestratorJobWorkspaceContainer: React.FC<
           jobs={jobs}
           activeJobs={activeJobs}
           selectedJob={visibleSelectedJob}
+          selectedJobListItem={visibleSelectedJobListItem}
+          selectedJobLoadState={
+            visibleSelectedJobListItem ? selectedJobLoadState : "idle"
+          }
           selectedJobId={navigation.selectedJobId}
           selectedJobIds={selectedJobIds}
           activeTab={navigation.activeTab}
@@ -217,6 +239,9 @@ export const OrchestratorJobWorkspaceContainer: React.FC<
           sourceFilter={filters.sourceFilter}
           sponsorFilter={filters.sponsorFilter}
           salaryFilter={filters.salaryFilter}
+          postedWithinDays={filters.postedWithinDays}
+          employmentTypes={filters.employmentTypes}
+          locationFilter={filters.location}
           dateFilter={filters.dateFilter}
           sourcesWithJobs={sourcesWithJobs}
           sort={filters.sort}
@@ -233,6 +258,9 @@ export const OrchestratorJobWorkspaceContainer: React.FC<
           onSourceFilterChange={filters.setSourceFilter}
           onSponsorFilterChange={filters.setSponsorFilter}
           onSalaryFilterChange={filters.setSalaryFilter}
+          onPostedWithinChange={filters.setPostedWithinDays}
+          onEmploymentTypesChange={filters.setEmploymentTypes}
+          onLocationFilterChange={filters.setLocation}
           onDateFilterChange={filters.setDateFilter}
           onSortChange={filters.setSort}
           onResetFilters={filters.resetFilters}
@@ -242,6 +270,7 @@ export const OrchestratorJobWorkspaceContainer: React.FC<
           onSelectJobId={navigation.handleSelectJobId}
           onJobUpdated={loadJobs}
           onPauseRefreshChange={setIsRefreshPaused}
+          onRetrySelectedJob={retrySelectedJob}
         />
       </div>
 
@@ -263,10 +292,15 @@ export const OrchestratorJobWorkspaceContainer: React.FC<
           activeTab={navigation.activeTab}
           activeJobs={activeJobs}
           selectedJob={visibleSelectedJob}
+          selectedJobListItem={visibleSelectedJobListItem}
+          selectedJobLoadState={
+            visibleSelectedJobListItem ? selectedJobLoadState : "idle"
+          }
           onOpenChange={ui.onDetailDrawerOpenChange}
           onSelectJobId={navigation.handleSelectJobId}
           onJobUpdated={loadJobs}
           onPauseRefreshChange={setIsRefreshPaused}
+          onRetrySelectedJob={retrySelectedJob}
         />
       )}
 

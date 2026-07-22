@@ -2,6 +2,7 @@ import type { VirtualListHandle } from "@client/lib/virtual-list";
 import type { Job, JobListItem, JobSource, JobStatus } from "@shared/types.js";
 import type React from "react";
 import type {
+  EmploymentType,
   FilterTab,
   JobDateFilter,
   JobSort,
@@ -13,6 +14,7 @@ import { JobDetailPanel } from "./JobDetailPanel";
 import { JobListPanel } from "./JobListPanel";
 import { OrchestratorFilters } from "./OrchestratorFilters";
 import { OrchestratorSummary } from "./OrchestratorSummary";
+import type { SelectedJobLoadState } from "./useOrchestratorData";
 
 interface EmptyStateAction {
   label: string;
@@ -25,6 +27,8 @@ interface OrchestratorJobsWorkspaceProps {
   jobs: JobListItem[];
   activeJobs: JobListItem[];
   selectedJob: Job | null;
+  selectedJobListItem: JobListItem | null;
+  selectedJobLoadState: SelectedJobLoadState;
   selectedJobId: string | null;
   selectedJobIds: Set<string>;
   activeTab: FilterTab;
@@ -36,6 +40,9 @@ interface OrchestratorJobsWorkspaceProps {
   sourceFilter: JobSource | "all";
   sponsorFilter: SponsorFilter;
   salaryFilter: SalaryFilter;
+  postedWithinDays: number | null;
+  employmentTypes: EmploymentType[];
+  locationFilter: string;
   dateFilter: JobDateFilter;
   sourcesWithJobs: JobSource[];
   sort: JobSort;
@@ -52,6 +59,9 @@ interface OrchestratorJobsWorkspaceProps {
   onSourceFilterChange: (value: JobSource | "all") => void;
   onSponsorFilterChange: (value: SponsorFilter) => void;
   onSalaryFilterChange: (value: SalaryFilter) => void;
+  onPostedWithinChange: (value: number | null) => void;
+  onEmploymentTypesChange: (value: EmploymentType[]) => void;
+  onLocationFilterChange: (value: string) => void;
   onDateFilterChange: (value: JobDateFilter) => void;
   onSortChange: (sort: JobSort) => void;
   onResetFilters: () => void;
@@ -61,6 +71,7 @@ interface OrchestratorJobsWorkspaceProps {
   onSelectJobId: (jobId: string | null) => void;
   onJobUpdated: () => Promise<void>;
   onPauseRefreshChange: (paused: boolean) => void;
+  onRetrySelectedJob: () => void;
 }
 
 export const OrchestratorJobsWorkspace: React.FC<
@@ -71,6 +82,8 @@ export const OrchestratorJobsWorkspace: React.FC<
   jobs,
   activeJobs,
   selectedJob,
+  selectedJobListItem,
+  selectedJobLoadState,
   selectedJobId,
   selectedJobIds,
   activeTab,
@@ -82,6 +95,9 @@ export const OrchestratorJobsWorkspace: React.FC<
   sourceFilter,
   sponsorFilter,
   salaryFilter,
+  postedWithinDays,
+  employmentTypes,
+  locationFilter,
   dateFilter,
   sourcesWithJobs,
   sort,
@@ -98,6 +114,9 @@ export const OrchestratorJobsWorkspace: React.FC<
   onSourceFilterChange,
   onSponsorFilterChange,
   onSalaryFilterChange,
+  onPostedWithinChange,
+  onEmploymentTypesChange,
+  onLocationFilterChange,
   onDateFilterChange,
   onSortChange,
   onResetFilters,
@@ -107,6 +126,7 @@ export const OrchestratorJobsWorkspace: React.FC<
   onSelectJobId,
   onJobUpdated,
   onPauseRefreshChange,
+  onRetrySelectedJob,
 }) => (
   <>
     <OrchestratorSummary stats={stats} isPipelineRunning={isPipelineRunning} />
@@ -132,6 +152,12 @@ export const OrchestratorJobsWorkspace: React.FC<
         onSponsorFilterChange={onSponsorFilterChange}
         salaryFilter={salaryFilter}
         onSalaryFilterChange={onSalaryFilterChange}
+        postedWithinDays={postedWithinDays}
+        onPostedWithinChange={onPostedWithinChange}
+        employmentTypes={employmentTypes}
+        onEmploymentTypesChange={onEmploymentTypesChange}
+        locationFilter={locationFilter}
+        onLocationFilterChange={onLocationFilterChange}
         dateFilter={dateFilter}
         onDateFilterChange={onDateFilterChange}
         sourcesWithJobs={sourcesWithJobs}
@@ -163,9 +189,12 @@ export const OrchestratorJobsWorkspace: React.FC<
             activeTab={activeTab}
             activeJobs={activeJobs}
             selectedJob={selectedJob}
+            selectedJobListItem={selectedJobListItem}
+            selectedJobLoadState={selectedJobLoadState}
             onSelectJobId={onSelectJobId}
             onJobUpdated={onJobUpdated}
             onPauseRefreshChange={onPauseRefreshChange}
+            onRetrySelectedJob={onRetrySelectedJob}
           />
         )}
       </div>
