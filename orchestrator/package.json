@@ -28,6 +28,7 @@
     "test:run": "vitest run"
   },
   "dependencies": {
+    "@azure/monitor-opentelemetry": "^1.18.2",
     "@hookform/resolvers": "^5.4.0",
     "@iconify-json/tabler": "^1.2.35",
     "@iconify/react": "^6.0.2",
