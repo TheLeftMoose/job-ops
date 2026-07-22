@@ -2,6 +2,10 @@
  * Express server entry point.
  */
 
+// Must stay first: initializes Azure Monitor OpenTelemetry before any
+// instrumented dependency (express, http) is loaded. No-op unless
+// APPLICATIONINSIGHTS_CONNECTION_STRING is set.
+import { telemetryEnabled } from "@infra/telemetry";
 import "./config/env";
 import { logger } from "@infra/logger";
 import { sanitizeUnknown } from "@infra/sanitize";
@@ -36,6 +40,7 @@ async function cleanupAuthSessions(trigger: "startup" | "interval") {
 }
 
 async function startServer() {
+  logger.info("Application Insights telemetry", { enabled: telemetryEnabled });
   await applyStoredEnvOverrides();
   try {
     await initializeExtractorRegistry();
