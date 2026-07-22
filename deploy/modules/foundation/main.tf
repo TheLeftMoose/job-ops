@@ -36,6 +36,19 @@ resource "azurerm_log_analytics_workspace" "main" {
   tags                = var.tags
 }
 
+# Workspace-based Application Insights, backed by the same LAW. Its connection
+# string is surfaced into the Container App (see modules/aca-app) so the
+# orchestrator's Azure Monitor OpenTelemetry Distro can ship request /
+# dependency / exception telemetry.
+resource "azurerm_application_insights" "main" {
+  name                = "appi-${var.name_base}"
+  location            = var.location
+  resource_group_name = var.resource_group_name
+  workspace_id        = azurerm_log_analytics_workspace.main.id
+  application_type    = "Node.JS"
+  tags                = var.tags
+}
+
 resource "azurerm_user_assigned_identity" "main" {
   name                = "id-${var.name_base}"
   location            = var.location
@@ -44,12 +57,12 @@ resource "azurerm_user_assigned_identity" "main" {
 }
 
 resource "azurerm_key_vault" "main" {
-  name                       = "kv-${var.name_base}-${random_string.kv_suffix.result}"
-  location                   = var.location
-  resource_group_name        = var.resource_group_name
-  tenant_id                  = var.tenant_id
-  sku_name                   = "standard"
-  enable_rbac_authorization  = true # azurerm 4.x; renamed in 5.x to rbac_authorization_enabled
+  name                          = "kv-${var.name_base}-${random_string.kv_suffix.result}"
+  location                      = var.location
+  resource_group_name           = var.resource_group_name
+  tenant_id                     = var.tenant_id
+  sku_name                      = "standard"
+  enable_rbac_authorization     = true # azurerm 4.x; renamed in 5.x to rbac_authorization_enabled
   soft_delete_retention_days    = 7
   purge_protection_enabled      = true # IRREVERSIBLE per Azure: once true, cannot be turned off; destroying KV soft-deletes the name for 7 days minimum
   public_network_access_enabled = true # Pinned: Defender auto-rem may flip to Disabled, which blocks operator/CI ops. Firewall (below) restricts to allowed IPs.
@@ -129,6 +142,11 @@ resource "azurerm_key_vault_secret" "managed" {
 
 output "log_analytics_workspace_id" {
   value = azurerm_log_analytics_workspace.main.id
+}
+
+output "appinsights_connection_string" {
+  value     = azurerm_application_insights.main.connection_string
+  sensitive = true
 }
 
 output "uami_id" {

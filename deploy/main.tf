@@ -72,5 +72,8 @@ module "aca_app" {
   key_vault_uri       = module.foundation.key_vault_uri
   app_storage_name    = module.aca_env.app_storage_name
   revision_suffix     = var.revision_suffix
-  tags                = local.tags
+
+  appinsights_connection_string = module.foundation.appinsights_connection_string
+
+  tags = local.tags
 }

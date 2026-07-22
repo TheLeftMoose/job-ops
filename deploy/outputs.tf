@@ -43,3 +43,8 @@ output "github_oidc_subscription_id" {
 output "container_app_name" {
   value = module.aca_app.name
 }
+
+output "appinsights_connection_string" {
+  value     = module.foundation.appinsights_connection_string
+  sensitive = true
+}

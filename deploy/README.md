@@ -99,6 +99,15 @@ curl.exe -i "https://$fqdn/health"
 - LLM provider env vars are intentionally **not** wired yet. When you decide on
   one, add the secret to Key Vault and a corresponding `secret { ... }` +
   `env { secret_name = ... }` pair in `modules/aca-app/main.tf`.
+- **Application Insights**: `modules/foundation` provisions a workspace-based
+  `azurerm_application_insights` (`appi-jobops-prod`) backed by the same Log
+  Analytics workspace. Its connection string is injected into the Container App
+  as `APPLICATIONINSIGHTS_CONNECTION_STRING` (via an inline ACA secret) plus
+  `OTEL_SERVICE_NAME=jobops-orchestrator`. The orchestrator activates the Azure
+  Monitor OpenTelemetry Distro only when that env var is present (see
+  `orchestrator/src/server/infra/telemetry.ts`), so requests / dependencies /
+  exceptions flow to App Insights in this deployment while staying inert
+  locally and upstream.
 
 ## Tear down
 
