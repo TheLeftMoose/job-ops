@@ -1,0 +1,758 @@
+{
+  "lenses": {
+    "0": {
+      "order": 0,
+      "parts": {
+        "0": {
+          "position": {
+            "x": 0,
+            "y": 0,
+            "colSpan": 12,
+            "rowSpan": 1
+          },
+          "metadata": {
+            "inputs": [],
+            "type": "Extension/HubsExtension/PartType/MarkdownPart",
+            "settings": {
+              "content": {
+                "settings": {
+                  "content": "**JobOps orchestrator** live telemetry (`jobops-orchestrator`). Tiles default to the last 24h; use the dashboard time picker to change the range.",
+                  "title": "JobOps \u2014 Application Insights",
+                  "subtitle": "appi-jobops-prod"
+                }
+              }
+            }
+          }
+        },
+        "1": {
+          "position": {
+            "x": 0,
+            "y": 1,
+            "colSpan": 6,
+            "rowSpan": 4
+          },
+          "metadata": {
+            "inputs": [
+              {
+                "name": "resourceTypeMode",
+                "isOptional": true
+              },
+              {
+                "name": "ComponentId",
+                "isOptional": true
+              },
+              {
+                "name": "Scope",
+                "value": {
+                  "resourceIds": [
+                    "$${appinsights_id}"
+                  ]
+                },
+                "isOptional": true
+              },
+              {
+                "name": "PartId",
+                "value": "71ae7157-944b-51ef-b124-5daf22dfaeb3",
+                "isOptional": true
+              },
+              {
+                "name": "Version",
+                "value": "2.0",
+                "isOptional": true
+              },
+              {
+                "name": "TimeRange",
+                "value": "P1D",
+                "isOptional": true
+              },
+              {
+                "name": "DashboardId",
+                "isOptional": true
+              },
+              {
+                "name": "DraftRequestParameters",
+                "isOptional": true
+              },
+              {
+                "name": "Query",
+                "value": "requests\n| summarize Requests = count() by bin(timestamp, 15m)\n| render timechart",
+                "isOptional": true
+              },
+              {
+                "name": "ControlType",
+                "value": "FrameControlChart",
+                "isOptional": true
+              },
+              {
+                "name": "SpecificChart",
+                "value": "Line",
+                "isOptional": true
+              },
+              {
+                "name": "PartTitle",
+                "value": "Request volume",
+                "isOptional": true
+              },
+              {
+                "name": "PartSubTitle",
+                "value": "Requests per 15m",
+                "isOptional": true
+              },
+              {
+                "name": "Dimensions",
+                "value": {
+                  "xAxis": {
+                    "name": "timestamp",
+                    "type": "datetime"
+                  },
+                  "yAxis": [
+                    {
+                      "name": "Requests",
+                      "type": "long"
+                    }
+                  ],
+                  "splitBy": [],
+                  "aggregation": "Sum"
+                },
+                "isOptional": true
+              },
+              {
+                "name": "IsQueryContainTimeRange",
+                "value": false,
+                "isOptional": true
+              }
+            ],
+            "type": "Extension/Microsoft_OperationsManagementSuite_Workspace/PartType/LogsDashboardPart",
+            "settings": {
+              "content": {
+                "Query": "requests\n| summarize Requests = count() by bin(timestamp, 15m)\n| render timechart",
+                "PartTitle": "Request volume",
+                "PartSubTitle": "Requests per 15m"
+              }
+            }
+          }
+        },
+        "2": {
+          "position": {
+            "x": 6,
+            "y": 1,
+            "colSpan": 6,
+            "rowSpan": 4
+          },
+          "metadata": {
+            "inputs": [
+              {
+                "name": "resourceTypeMode",
+                "isOptional": true
+              },
+              {
+                "name": "ComponentId",
+                "isOptional": true
+              },
+              {
+                "name": "Scope",
+                "value": {
+                  "resourceIds": [
+                    "$${appinsights_id}"
+                  ]
+                },
+                "isOptional": true
+              },
+              {
+                "name": "PartId",
+                "value": "a5fbff8f-c6a7-5249-846b-e3c0af8e3fc0",
+                "isOptional": true
+              },
+              {
+                "name": "Version",
+                "value": "2.0",
+                "isOptional": true
+              },
+              {
+                "name": "TimeRange",
+                "value": "P1D",
+                "isOptional": true
+              },
+              {
+                "name": "DashboardId",
+                "isOptional": true
+              },
+              {
+                "name": "DraftRequestParameters",
+                "isOptional": true
+              },
+              {
+                "name": "Query",
+                "value": "requests\n| where success == false\n| summarize Failures = count() by bin(timestamp, 15m), resultCode\n| render timechart",
+                "isOptional": true
+              },
+              {
+                "name": "ControlType",
+                "value": "FrameControlChart",
+                "isOptional": true
+              },
+              {
+                "name": "SpecificChart",
+                "value": "UnstackedColumn",
+                "isOptional": true
+              },
+              {
+                "name": "PartTitle",
+                "value": "Failed requests",
+                "isOptional": true
+              },
+              {
+                "name": "PartSubTitle",
+                "value": "Failures per 15m by result code",
+                "isOptional": true
+              },
+              {
+                "name": "Dimensions",
+                "value": {
+                  "xAxis": {
+                    "name": "timestamp",
+                    "type": "datetime"
+                  },
+                  "yAxis": [
+                    {
+                      "name": "Failures",
+                      "type": "long"
+                    }
+                  ],
+                  "splitBy": [
+                    {
+                      "name": "resultCode",
+                      "type": "string"
+                    }
+                  ],
+                  "aggregation": "Sum"
+                },
+                "isOptional": true
+              },
+              {
+                "name": "IsQueryContainTimeRange",
+                "value": false,
+                "isOptional": true
+              }
+            ],
+            "type": "Extension/Microsoft_OperationsManagementSuite_Workspace/PartType/LogsDashboardPart",
+            "settings": {
+              "content": {
+                "Query": "requests\n| where success == false\n| summarize Failures = count() by bin(timestamp, 15m), resultCode\n| render timechart",
+                "PartTitle": "Failed requests",
+                "PartSubTitle": "Failures per 15m by result code"
+              }
+            }
+          }
+        },
+        "3": {
+          "position": {
+            "x": 0,
+            "y": 5,
+            "colSpan": 6,
+            "rowSpan": 4
+          },
+          "metadata": {
+            "inputs": [
+              {
+                "name": "resourceTypeMode",
+                "isOptional": true
+              },
+              {
+                "name": "ComponentId",
+                "isOptional": true
+              },
+              {
+                "name": "Scope",
+                "value": {
+                  "resourceIds": [
+                    "$${appinsights_id}"
+                  ]
+                },
+                "isOptional": true
+              },
+              {
+                "name": "PartId",
+                "value": "a44de6e0-e326-5903-9052-181e930ff136",
+                "isOptional": true
+              },
+              {
+                "name": "Version",
+                "value": "2.0",
+                "isOptional": true
+              },
+              {
+                "name": "TimeRange",
+                "value": "P1D",
+                "isOptional": true
+              },
+              {
+                "name": "DashboardId",
+                "isOptional": true
+              },
+              {
+                "name": "DraftRequestParameters",
+                "isOptional": true
+              },
+              {
+                "name": "Query",
+                "value": "requests\n| summarize p50 = percentile(duration, 50), p95 = percentile(duration, 95) by bin(timestamp, 15m)\n| render timechart",
+                "isOptional": true
+              },
+              {
+                "name": "ControlType",
+                "value": "FrameControlChart",
+                "isOptional": true
+              },
+              {
+                "name": "SpecificChart",
+                "value": "Line",
+                "isOptional": true
+              },
+              {
+                "name": "PartTitle",
+                "value": "Request latency",
+                "isOptional": true
+              },
+              {
+                "name": "PartSubTitle",
+                "value": "p50 / p95 duration (ms) per 15m",
+                "isOptional": true
+              },
+              {
+                "name": "Dimensions",
+                "value": {
+                  "xAxis": {
+                    "name": "timestamp",
+                    "type": "datetime"
+                  },
+                  "yAxis": [
+                    {
+                      "name": "p95",
+                      "type": "real"
+                    }
+                  ],
+                  "splitBy": [],
+                  "aggregation": "Sum"
+                },
+                "isOptional": true
+              },
+              {
+                "name": "IsQueryContainTimeRange",
+                "value": false,
+                "isOptional": true
+              }
+            ],
+            "type": "Extension/Microsoft_OperationsManagementSuite_Workspace/PartType/LogsDashboardPart",
+            "settings": {
+              "content": {
+                "Query": "requests\n| summarize p50 = percentile(duration, 50), p95 = percentile(duration, 95) by bin(timestamp, 15m)\n| render timechart",
+                "PartTitle": "Request latency",
+                "PartSubTitle": "p50 / p95 duration (ms) per 15m"
+              }
+            }
+          }
+        },
+        "4": {
+          "position": {
+            "x": 6,
+            "y": 5,
+            "colSpan": 6,
+            "rowSpan": 4
+          },
+          "metadata": {
+            "inputs": [
+              {
+                "name": "resourceTypeMode",
+                "isOptional": true
+              },
+              {
+                "name": "ComponentId",
+                "isOptional": true
+              },
+              {
+                "name": "Scope",
+                "value": {
+                  "resourceIds": [
+                    "$${appinsights_id}"
+                  ]
+                },
+                "isOptional": true
+              },
+              {
+                "name": "PartId",
+                "value": "79c4336b-0ac5-5170-947a-4109115520be",
+                "isOptional": true
+              },
+              {
+                "name": "Version",
+                "value": "2.0",
+                "isOptional": true
+              },
+              {
+                "name": "TimeRange",
+                "value": "P1D",
+                "isOptional": true
+              },
+              {
+                "name": "DashboardId",
+                "isOptional": true
+              },
+              {
+                "name": "DraftRequestParameters",
+                "isOptional": true
+              },
+              {
+                "name": "Query",
+                "value": "requests\n| summarize Count = count(), AvgMs = round(avg(duration), 1), P95Ms = round(percentile(duration, 95), 1), Failures = countif(success == false) by name\n| top 15 by Count desc",
+                "isOptional": true
+              },
+              {
+                "name": "ControlType",
+                "value": "AnalyticsGrid",
+                "isOptional": true
+              },
+              {
+                "name": "PartTitle",
+                "value": "Top routes",
+                "isOptional": true
+              },
+              {
+                "name": "PartSubTitle",
+                "value": "By count with avg/p95 latency (24h)",
+                "isOptional": true
+              },
+              {
+                "name": "IsQueryContainTimeRange",
+                "value": false,
+                "isOptional": true
+              }
+            ],
+            "type": "Extension/Microsoft_OperationsManagementSuite_Workspace/PartType/LogsDashboardPart",
+            "settings": {
+              "content": {
+                "Query": "requests\n| summarize Count = count(), AvgMs = round(avg(duration), 1), P95Ms = round(percentile(duration, 95), 1), Failures = countif(success == false) by name\n| top 15 by Count desc",
+                "PartTitle": "Top routes",
+                "PartSubTitle": "By count with avg/p95 latency (24h)"
+              }
+            }
+          }
+        },
+        "5": {
+          "position": {
+            "x": 0,
+            "y": 9,
+            "colSpan": 6,
+            "rowSpan": 4
+          },
+          "metadata": {
+            "inputs": [
+              {
+                "name": "resourceTypeMode",
+                "isOptional": true
+              },
+              {
+                "name": "ComponentId",
+                "isOptional": true
+              },
+              {
+                "name": "Scope",
+                "value": {
+                  "resourceIds": [
+                    "$${appinsights_id}"
+                  ]
+                },
+                "isOptional": true
+              },
+              {
+                "name": "PartId",
+                "value": "29fa19af-8220-5e2b-95c1-84976ff655d5",
+                "isOptional": true
+              },
+              {
+                "name": "Version",
+                "value": "2.0",
+                "isOptional": true
+              },
+              {
+                "name": "TimeRange",
+                "value": "P1D",
+                "isOptional": true
+              },
+              {
+                "name": "DashboardId",
+                "isOptional": true
+              },
+              {
+                "name": "DraftRequestParameters",
+                "isOptional": true
+              },
+              {
+                "name": "Query",
+                "value": "dependencies\n| summarize Calls = count(), AvgMs = round(avg(duration), 1), Failures = countif(success == false) by type, target\n| top 15 by Calls desc",
+                "isOptional": true
+              },
+              {
+                "name": "ControlType",
+                "value": "AnalyticsGrid",
+                "isOptional": true
+              },
+              {
+                "name": "PartTitle",
+                "value": "Dependencies",
+                "isOptional": true
+              },
+              {
+                "name": "PartSubTitle",
+                "value": "Outbound calls (e.g. LLM/HTTP) by target (24h)",
+                "isOptional": true
+              },
+              {
+                "name": "IsQueryContainTimeRange",
+                "value": false,
+                "isOptional": true
+              }
+            ],
+            "type": "Extension/Microsoft_OperationsManagementSuite_Workspace/PartType/LogsDashboardPart",
+            "settings": {
+              "content": {
+                "Query": "dependencies\n| summarize Calls = count(), AvgMs = round(avg(duration), 1), Failures = countif(success == false) by type, target\n| top 15 by Calls desc",
+                "PartTitle": "Dependencies",
+                "PartSubTitle": "Outbound calls (e.g. LLM/HTTP) by target (24h)"
+              }
+            }
+          }
+        },
+        "6": {
+          "position": {
+            "x": 6,
+            "y": 9,
+            "colSpan": 6,
+            "rowSpan": 4
+          },
+          "metadata": {
+            "inputs": [
+              {
+                "name": "resourceTypeMode",
+                "isOptional": true
+              },
+              {
+                "name": "ComponentId",
+                "isOptional": true
+              },
+              {
+                "name": "Scope",
+                "value": {
+                  "resourceIds": [
+                    "$${appinsights_id}"
+                  ]
+                },
+                "isOptional": true
+              },
+              {
+                "name": "PartId",
+                "value": "2d25ffb5-76ee-5e6a-9924-f599658a71b4",
+                "isOptional": true
+              },
+              {
+                "name": "Version",
+                "value": "2.0",
+                "isOptional": true
+              },
+              {
+                "name": "TimeRange",
+                "value": "P1D",
+                "isOptional": true
+              },
+              {
+                "name": "DashboardId",
+                "isOptional": true
+              },
+              {
+                "name": "DraftRequestParameters",
+                "isOptional": true
+              },
+              {
+                "name": "Query",
+                "value": "exceptions\n| summarize Exceptions = count() by bin(timestamp, 15m), type\n| render timechart",
+                "isOptional": true
+              },
+              {
+                "name": "ControlType",
+                "value": "FrameControlChart",
+                "isOptional": true
+              },
+              {
+                "name": "SpecificChart",
+                "value": "UnstackedColumn",
+                "isOptional": true
+              },
+              {
+                "name": "PartTitle",
+                "value": "Exceptions",
+                "isOptional": true
+              },
+              {
+                "name": "PartSubTitle",
+                "value": "Server exceptions per 15m by type",
+                "isOptional": true
+              },
+              {
+                "name": "Dimensions",
+                "value": {
+                  "xAxis": {
+                    "name": "timestamp",
+                    "type": "datetime"
+                  },
+                  "yAxis": [
+                    {
+                      "name": "Exceptions",
+                      "type": "long"
+                    }
+                  ],
+                  "splitBy": [
+                    {
+                      "name": "type",
+                      "type": "string"
+                    }
+                  ],
+                  "aggregation": "Sum"
+                },
+                "isOptional": true
+              },
+              {
+                "name": "IsQueryContainTimeRange",
+                "value": false,
+                "isOptional": true
+              }
+            ],
+            "type": "Extension/Microsoft_OperationsManagementSuite_Workspace/PartType/LogsDashboardPart",
+            "settings": {
+              "content": {
+                "Query": "exceptions\n| summarize Exceptions = count() by bin(timestamp, 15m), type\n| render timechart",
+                "PartTitle": "Exceptions",
+                "PartSubTitle": "Server exceptions per 15m by type"
+              }
+            }
+          }
+        },
+        "7": {
+          "position": {
+            "x": 0,
+            "y": 13,
+            "colSpan": 12,
+            "rowSpan": 4
+          },
+          "metadata": {
+            "inputs": [
+              {
+                "name": "resourceTypeMode",
+                "isOptional": true
+              },
+              {
+                "name": "ComponentId",
+                "isOptional": true
+              },
+              {
+                "name": "Scope",
+                "value": {
+                  "resourceIds": [
+                    "$${appinsights_id}"
+                  ]
+                },
+                "isOptional": true
+              },
+              {
+                "name": "PartId",
+                "value": "87903917-583c-510f-ac25-c481b2fada5e",
+                "isOptional": true
+              },
+              {
+                "name": "Version",
+                "value": "2.0",
+                "isOptional": true
+              },
+              {
+                "name": "TimeRange",
+                "value": "P1D",
+                "isOptional": true
+              },
+              {
+                "name": "DashboardId",
+                "isOptional": true
+              },
+              {
+                "name": "DraftRequestParameters",
+                "isOptional": true
+              },
+              {
+                "name": "Query",
+                "value": "requests\n| where success == false\n| project timestamp, name, resultCode, durationMs = round(duration, 1), operation_Id, cloud_RoleInstance\n| order by timestamp desc\n| take 50",
+                "isOptional": true
+              },
+              {
+                "name": "ControlType",
+                "value": "AnalyticsGrid",
+                "isOptional": true
+              },
+              {
+                "name": "PartTitle",
+                "value": "Recent failed requests",
+                "isOptional": true
+              },
+              {
+                "name": "PartSubTitle",
+                "value": "Latest non-2xx/failed requests (24h)",
+                "isOptional": true
+              },
+              {
+                "name": "IsQueryContainTimeRange",
+                "value": false,
+                "isOptional": true
+              }
+            ],
+            "type": "Extension/Microsoft_OperationsManagementSuite_Workspace/PartType/LogsDashboardPart",
+            "settings": {
+              "content": {
+                "Query": "requests\n| where success == false\n| project timestamp, name, resultCode, durationMs = round(duration, 1), operation_Id, cloud_RoleInstance\n| order by timestamp desc\n| take 50",
+                "PartTitle": "Recent failed requests",
+                "PartSubTitle": "Latest non-2xx/failed requests (24h)"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "metadata": {
+    "model": {
+      "timeRange": {
+        "value": {
+          "relative": {
+            "duration": 24,
+            "timeUnit": 1
+          }
+        },
+        "type": "MsPortalFx.Composition.Configuration.ValueTypes.TimeRange"
+      },
+      "filterLocale": {
+        "value": "en-us"
+      },
+      "filters": {
+        "value": {
+          "MsPortalFx_TimeRange": {
+            "model": {
+              "format": "utc",
+              "granularity": "auto",
+              "relative": "24h"
+            },
+            "displayCache": {
+              "name": "UTC Time",
+              "value": "Past 24 hours"
+            }
+          }
+        }
+      }
+    }
+  }
+}

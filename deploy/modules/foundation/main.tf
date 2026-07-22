@@ -149,6 +149,10 @@ output "appinsights_connection_string" {
   sensitive = true
 }
 
+output "appinsights_id" {
+  value = azurerm_application_insights.main.id
+}
+
 output "uami_id" {
   value = azurerm_user_assigned_identity.main.id
 }

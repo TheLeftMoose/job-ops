@@ -77,3 +77,17 @@ module "aca_app" {
 
   tags = local.tags
 }
+
+# Starter Application Insights dashboard (request volume, failures, latency,
+# top routes, dependencies, exceptions). Tiles are scoped to the App Insights
+# resource via templatefile injection.
+resource "azurerm_portal_dashboard" "appinsights" {
+  name                = "jobops-appinsights"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = var.location
+  tags                = merge(local.tags, { "hidden-title" = "JobOps — App Insights" })
+
+  dashboard_properties = templatefile("${path.module}/dashboard.tpl.json", {
+    appinsights_id = module.foundation.appinsights_id
+  })
+}

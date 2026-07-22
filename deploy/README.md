@@ -108,6 +108,12 @@ curl.exe -i "https://$fqdn/health"
   `orchestrator/src/server/infra/telemetry.ts`), so requests / dependencies /
   exceptions flow to App Insights in this deployment while staying inert
   locally and upstream.
+- **Dashboard**: `azurerm_portal_dashboard.appinsights` (`jobops-appinsights`)
+  is a starter Azure shared dashboard rendered from `deploy/dashboard.tpl.json`
+  (request volume, failures, latency p50/p95, top routes, dependencies,
+  exceptions, recent failures). Regenerate the JSON with the session generator
+  if tiles change; note the live portal RP wants array-form lenses/parts while
+  the azurerm provider (this template) wants map-form.
 
 ## Tear down
 
