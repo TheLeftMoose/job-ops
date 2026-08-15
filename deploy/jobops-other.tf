@@ -31,6 +31,7 @@ module "other_foundation" {
   kv_admin_ip_cidrs             = var.kv_admin_ip_cidrs
   pe_subnet_id                  = module.network.pe_subnet_id
   key_vault_private_dns_zone_id = data.azurerm_private_dns_zone.key_vault.id
+  key_vault_name_prefix         = "jobops-other"
   basic_auth_user               = var.other_basic_auth_user
   tags                          = local.other_tags
 }

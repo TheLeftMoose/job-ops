@@ -28,11 +28,20 @@ variable "key_vault_private_dns_zone_id" {
   default     = ""
   description = "Optional privatelink.vaultcore.azure.net zone for the Key Vault private endpoint."
 }
+variable "key_vault_name_prefix" {
+  type        = string
+  default     = ""
+  description = "Optional Key Vault name prefix. Defaults to a 14-character truncation of name_base to satisfy Azure's 24-character limit."
+}
 variable "basic_auth_user" {
   type    = string
   default = "admin"
 }
 variable "tags" { type = map(string) }
+
+locals {
+  key_vault_name_prefix = var.key_vault_name_prefix != "" ? var.key_vault_name_prefix : substr(var.name_base, 0, 14)
+}
 
 resource "random_string" "kv_suffix" {
   length  = 6
@@ -68,7 +77,7 @@ resource "azurerm_user_assigned_identity" "main" {
 }
 
 resource "azurerm_key_vault" "main" {
-  name                          = "kv-${var.name_base}-${random_string.kv_suffix.result}"
+  name                          = "kv-${local.key_vault_name_prefix}-${random_string.kv_suffix.result}"
   location                      = var.location
   resource_group_name           = var.resource_group_name
   tenant_id                     = var.tenant_id
