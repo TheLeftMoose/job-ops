@@ -30,7 +30,7 @@ variable "runner_vm_name" {
 
 variable "runner_vm_size" {
   type        = string
-  default     = "Standard_B2s"
+  default     = "Standard_B2als_v2"
   description = "Runner VM SKU."
 }
 
