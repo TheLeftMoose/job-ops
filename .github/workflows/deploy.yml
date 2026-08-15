@@ -53,6 +53,10 @@ env:
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "0"
   IMAGE_REPO: ghcr.io/theleftmoose/job-ops
+  TFSTATE_RESOURCE_GROUP: rg-jobops-tfstate
+  TFSTATE_STORAGE_ACCOUNT: stjobopstfstkm3uaz
+  TFSTATE_CONTAINER: tfstate
+  TFSTATE_KEY: jobops-prod.tfstate
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -62,6 +66,7 @@ jobs:
   plan:
     if: github.repository == 'TheLeftMoose/job-ops'
     runs-on: ubuntu-latest
+    environment: prod
     outputs:
       plan_has_changes: ${{ steps.plan.outputs.has_changes }}
     steps:
@@ -90,7 +95,13 @@ jobs:
           ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-        run: terraform init -input=false
+        run: |
+          terraform init -input=false \
+            -backend-config="resource_group_name=${TFSTATE_RESOURCE_GROUP}" \
+            -backend-config="storage_account_name=${TFSTATE_STORAGE_ACCOUNT}" \
+            -backend-config="container_name=${TFSTATE_CONTAINER}" \
+            -backend-config="key=${TFSTATE_KEY}" \
+            -backend-config="use_azuread_auth=true"
 
       - name: Terraform plan
         id: plan
@@ -178,7 +189,13 @@ jobs:
           ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-        run: terraform init -input=false
+        run: |
+          terraform init -input=false \
+            -backend-config="resource_group_name=${TFSTATE_RESOURCE_GROUP}" \
+            -backend-config="storage_account_name=${TFSTATE_STORAGE_ACCOUNT}" \
+            -backend-config="container_name=${TFSTATE_CONTAINER}" \
+            -backend-config="key=${TFSTATE_KEY}" \
+            -backend-config="use_azuread_auth=true"
 
       - name: Download plan
         uses: actions/download-artifact@v4
