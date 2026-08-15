@@ -74,8 +74,8 @@ az vm run-command create `
   --vm-name vm-jobops-prod-gh-runner `
   --location swedencentral `
   --run-command-name register-github-runner `
-  --script 'cloud-init status --wait && /usr/local/sbin/register-actions-runner "$1"' `
-  --protected-parameters "token=$token"
+  --script 'cloud-init status --wait && /usr/local/sbin/register-actions-runner "$GITHUB_RUNNER_TOKEN"' `
+  --protected-parameters "GITHUB_RUNNER_TOKEN=$token"
 Remove-Variable token
 
 gh api repos/TheLeftMoose/job-ops/actions/runners `
