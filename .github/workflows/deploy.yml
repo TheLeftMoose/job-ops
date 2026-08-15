@@ -13,7 +13,8 @@ name: deploy
 #                  of KV-backed secrets after rotation)
 #   ref          = git ref of deploy/ to use (default: infra)
 #
-# Terraform jobs run in the `prod` GitHub Environment on the private runner.
+# Plan uses the branch-bound OIDC credential. Apply runs in the protected
+# `prod` GitHub Environment, so only the mutating job requires approval.
 
 on:
   workflow_dispatch:
@@ -63,7 +64,6 @@ jobs:
   wake-runner:
     if: github.repository == 'TheLeftMoose/job-ops'
     runs-on: ubuntu-latest
-    environment: prod
     timeout-minutes: 10
     steps:
       - name: Azure login (OIDC)
@@ -84,7 +84,6 @@ jobs:
     if: github.repository == 'TheLeftMoose/job-ops'
     needs: wake-runner
     runs-on: [self-hosted, linux, x64, jobops-deploy]
-    environment: prod
     outputs:
       plan_has_changes: ${{ steps.plan.outputs.has_changes }}
     steps:
@@ -101,6 +100,13 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Setup Terraform
+        run: |
+          if ! command -v unzip >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --yes unzip
+          fi
+
+      - name: Install Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.8
@@ -195,6 +201,13 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Setup Terraform
+        run: |
+          if ! command -v unzip >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --yes unzip
+          fi
+
+      - name: Install Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.8
@@ -243,7 +256,6 @@ jobs:
     if: always() && github.repository == 'TheLeftMoose/job-ops'
     needs: [wake-runner, plan, apply]
     runs-on: ubuntu-latest
-    environment: prod
     timeout-minutes: 10
     steps:
       - name: Azure login (OIDC)
