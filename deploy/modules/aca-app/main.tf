@@ -43,6 +43,11 @@ variable "appinsights_connection_string" {
   sensitive   = true
   description = "Application Insights connection string. When non-empty it is injected as APPLICATIONINSIGHTS_CONNECTION_STRING (via an inline secret) so the app's Azure Monitor OpenTelemetry Distro activates."
 }
+variable "enable_appinsights" {
+  type        = bool
+  default     = false
+  description = "Whether to inject the Application Insights connection string. This must be explicit because computed connection strings are unknown during planning."
+}
 variable "otel_service_name" {
   type        = string
   default     = "jobops-orchestrator"
@@ -107,7 +112,7 @@ resource "azurerm_container_app" "main" {
   # from the Application Insights resource, so no out-of-band KV seeding).
   # Only present when a connection string is supplied.
   dynamic "secret" {
-    for_each = var.appinsights_connection_string != "" ? [1] : []
+    for_each = var.enable_appinsights ? { enabled = true } : {}
     content {
       name  = "appinsights-connection-string"
       value = var.appinsights_connection_string
@@ -182,7 +187,7 @@ resource "azurerm_container_app" "main" {
         value = var.otel_service_name
       }
       dynamic "env" {
-        for_each = var.appinsights_connection_string != "" ? [1] : []
+        for_each = var.enable_appinsights ? { enabled = true } : {}
         content {
           name        = "APPLICATIONINSIGHTS_CONNECTION_STRING"
           secret_name = "appinsights-connection-string"

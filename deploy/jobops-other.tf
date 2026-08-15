@@ -81,6 +81,7 @@ module "other_aca_app" {
   revision_suffix     = var.other_revision_suffix
   otel_service_name   = "jobops-other-orchestrator"
 
+  enable_appinsights            = true
   appinsights_connection_string = module.other_foundation.appinsights_connection_string
 
   tags = local.other_tags

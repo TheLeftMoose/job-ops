@@ -73,6 +73,7 @@ module "aca_app" {
   app_storage_name    = module.aca_env.app_storage_name
   revision_suffix     = var.revision_suffix
 
+  enable_appinsights            = true
   appinsights_connection_string = module.foundation.appinsights_connection_string
 
   tags = local.tags
