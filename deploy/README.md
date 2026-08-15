@@ -23,7 +23,7 @@ Never PR `infra` (or anything containing `deploy/`) to upstream.
 
 ```markdown
 deploy/
-├─ bootstrap/        One-off: creates RG + Storage Account for tfstate (local state)
+├─ bootstrap/        Local state: tfstate account/private endpoint + private GH runner
 ├─ providers.tf      AzureRM + azapi + random; azurerm remote backend
 ├─ variables.tf
 ├─ main.tf           Composes the original production instance
@@ -54,7 +54,8 @@ foreach ($p in 'Microsoft.App','Microsoft.OperationalInsights','Microsoft.KeyVau
   az provider register -n $p --consent-to-permissions | Out-Null
 }
 
-# 2. Bootstrap the tfstate storage account (local state, run once per sub)
+# 2. Bootstrap the tfstate storage account, private endpoint, and runner
+#    (local state; keep deploy/bootstrap/terraform.tfstate safe)
 cd deploy/bootstrap
 terraform init
 terraform apply -auto-approve
@@ -62,6 +63,29 @@ $SA = terraform output -raw storage_account_name
 $RG = terraform output -raw resource_group_name
 $CT = terraform output -raw container_name
 cd ..
+
+# 2a. Register the runner once with a short-lived GitHub token. The protected
+#     parameter is encrypted by Azure and is not stored in Terraform state.
+$token = gh api --method POST `
+  repos/TheLeftMoose/job-ops/actions/runners/registration-token `
+  --jq .token
+az vm run-command create `
+  --resource-group rg-jobops-prod `
+  --vm-name vm-jobops-prod-gh-runner `
+  --location swedencentral `
+  --run-command-name register-github-runner `
+  --script 'cloud-init status --wait && /usr/local/sbin/register-actions-runner "$1"' `
+  --protected-parameters "token=$token"
+Remove-Variable token
+
+gh api repos/TheLeftMoose/job-ops/actions/runners `
+  --jq '.runners[] | select(.name == "vm-jobops-prod-gh-runner")'
+
+az vm run-command delete `
+  --resource-group rg-jobops-prod `
+  --vm-name vm-jobops-prod-gh-runner `
+  --run-command-name register-github-runner `
+  --yes
 
 # 3. Init main TF against the remote backend
 terraform init `
@@ -95,6 +119,15 @@ curl.exe -i "https://$fqdn/health"
 ## Notes
 
 - Single replica (SQLite). Deploys briefly take the app offline.
+- The Terraform state account has public network access disabled. Its blob
+  endpoint is reachable only through the bootstrap-managed private endpoint.
+- Terraform plan/apply jobs run on `vm-jobops-prod-gh-runner`, labelled
+  `jobops-deploy`. The workflow starts the normally-deallocated VM before plan
+  and deallocates it after plan/apply. The VM has no public IP or inbound NSG
+  access; outbound traffic uses a dedicated NAT gateway.
+- Runner registration uses a one-hour GitHub registration token and Azure
+  Managed Run Command protected parameters. No GitHub PAT or registration
+  token is committed or written to Terraform state.
 - `jobops-other` shares `cae-jobops-prod`, its VNet, private DNS, and Log
   Analytics workspace. It has a separate Container App, premium NFS storage
   account/share, private endpoint, managed identity, Key Vault, generated

@@ -3,8 +3,8 @@ name: deploy
 # Fork-only Terraform-driven deploy workflow.
 #
 # Single source of truth = `terraform apply` against the deploy/ stack on the
-# `infra` branch of TheLeftMoose/job-ops. No `az` mutations; nothing drifts
-# behind Terraform's back.
+# `infra` branch of TheLeftMoose/job-ops. The hosted wake/cleanup jobs only
+# change VM power state; all resource configuration remains in Terraform.
 #
 # UX:
 #   action       = plan (default) | apply
@@ -13,8 +13,7 @@ name: deploy
 #                  of KV-backed secrets after rotation)
 #   ref          = git ref of deploy/ to use (default: infra)
 #
-# Apply runs in the `prod` GitHub Environment, which is configured with a
-# required reviewer. Plan runs without environment gating.
+# Terraform jobs run in the `prod` GitHub Environment on the private runner.
 
 on:
   workflow_dispatch:
@@ -57,15 +56,34 @@ env:
   TFSTATE_STORAGE_ACCOUNT: stjobopstfstkm3uaz
   TFSTATE_CONTAINER: tfstate
   TFSTATE_KEY: jobops-prod.tfstate
+  RUNNER_RESOURCE_GROUP: rg-jobops-prod
+  RUNNER_VM_NAME: vm-jobops-prod-gh-runner
 
 jobs:
+  wake-runner:
+    if: github.repository == 'TheLeftMoose/job-ops'
+    runs-on: ubuntu-latest
+    environment: prod
+    timeout-minutes: 10
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Start private deployment runner
+        run: az vm start --resource-group "$RUNNER_RESOURCE_GROUP" --name "$RUNNER_VM_NAME"
+
   # ---------------------------------------------------------------------------
   # plan: always runs. Surfaces the diff in the run log + step summary so the
   # apply-gate reviewer has something to actually review.
   # ---------------------------------------------------------------------------
   plan:
     if: github.repository == 'TheLeftMoose/job-ops'
-    runs-on: ubuntu-latest
+    needs: wake-runner
+    runs-on: [self-hosted, linux, x64, jobops-deploy]
     environment: prod
     outputs:
       plan_has_changes: ${{ steps.plan.outputs.has_changes }}
@@ -161,7 +179,7 @@ jobs:
   apply:
     if: github.repository == 'TheLeftMoose/job-ops' && inputs.action == 'apply'
     needs: plan
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, jobops-deploy]
     environment: prod
     steps:
       - name: Checkout deploy stack
@@ -220,3 +238,20 @@ jobs:
           ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
         run: terraform output
+
+  cleanup-runner:
+    if: always() && github.repository == 'TheLeftMoose/job-ops'
+    needs: [wake-runner, plan, apply]
+    runs-on: ubuntu-latest
+    environment: prod
+    timeout-minutes: 10
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deallocate private deployment runner
+        run: az vm deallocate --resource-group "$RUNNER_RESOURCE_GROUP" --name "$RUNNER_VM_NAME"

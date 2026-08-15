@@ -1,0 +1,67 @@
+#cloud-config
+
+package_update: true
+packages:
+  - ca-certificates
+  - curl
+  - git
+  - jq
+
+write_files:
+  - path: /usr/local/sbin/install-actions-runner
+    permissions: "0750"
+    owner: root:root
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      install_dir=/opt/actions-runner
+      archive=/tmp/actions-runner.tar.gz
+      mkdir -p "$${install_dir}"
+
+      curl --fail --location --retry 5 --retry-all-errors \
+        "https://github.com/actions/runner/releases/download/v${runner_version}/actions-runner-linux-x64-${runner_version}.tar.gz" \
+        --output "$${archive}"
+      echo "${runner_sha256}  $${archive}" | sha256sum --check -
+      tar --extract --gzip --file "$${archive}" --directory "$${install_dir}"
+      rm -f "$${archive}"
+
+      cd "$${install_dir}"
+      ./bin/installdependencies.sh
+      chown -R runneradmin:runneradmin "$${install_dir}"
+
+      curl --fail --location --retry 5 --retry-all-errors \
+        https://aka.ms/InstallAzureCLIDeb --output /tmp/install-azure-cli.sh
+      bash /tmp/install-azure-cli.sh
+      rm -f /tmp/install-azure-cli.sh
+
+  - path: /usr/local/sbin/register-actions-runner
+    permissions: "0750"
+    owner: root:root
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      token="$${1:?A short-lived GitHub runner registration token is required}"
+      install_dir=/opt/actions-runner
+      cd "$${install_dir}"
+
+      if [[ ! -f .runner ]]; then
+        sudo -u runneradmin ./config.sh \
+          --url "${github_repository_url}" \
+          --token "$${token}" \
+          --name "${runner_name}" \
+          --labels "jobops-deploy" \
+          --work "_work" \
+          --unattended \
+          --replace
+      fi
+
+      if ! find /etc/systemd/system -maxdepth 1 \
+        -name 'actions.runner.*.service' -print -quit | grep -q .; then
+        ./svc.sh install runneradmin
+      fi
+      ./svc.sh start
+
+runcmd:
+  - [bash, /usr/local/sbin/install-actions-runner]
