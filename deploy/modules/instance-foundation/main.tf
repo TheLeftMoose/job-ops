@@ -18,6 +18,16 @@ variable "kv_admin_ip_cidrs" {
   type    = list(string)
   default = []
 }
+variable "pe_subnet_id" {
+  type        = string
+  default     = ""
+  description = "Optional subnet for a Key Vault private endpoint."
+}
+variable "key_vault_private_dns_zone_id" {
+  type        = string
+  default     = ""
+  description = "Optional privatelink.vaultcore.azure.net zone for the Key Vault private endpoint."
+}
 variable "basic_auth_user" {
   type    = string
   default = "admin"
@@ -105,13 +115,37 @@ resource "azurerm_role_assignment" "kv_secrets_user_uami" {
   principal_id         = azurerm_user_assigned_identity.main.principal_id
 }
 
+resource "azurerm_private_endpoint" "key_vault" {
+  count               = var.pe_subnet_id != "" && var.key_vault_private_dns_zone_id != "" ? 1 : 0
+  name                = "pe-${var.name_base}-vault"
+  location            = var.location
+  resource_group_name = var.resource_group_name
+  subnet_id           = var.pe_subnet_id
+  tags                = var.tags
+
+  private_service_connection {
+    name                           = "psc-${var.name_base}-vault"
+    private_connection_resource_id = azurerm_key_vault.main.id
+    subresource_names              = ["vault"]
+    is_manual_connection           = false
+  }
+
+  private_dns_zone_group {
+    name                 = "default"
+    private_dns_zone_ids = [var.key_vault_private_dns_zone_id]
+  }
+}
+
 resource "azurerm_key_vault_secret" "basic_auth_user" {
   name         = "basic-auth-user"
   value        = var.basic_auth_user
   key_vault_id = azurerm_key_vault.main.id
   content_type = "text/plain"
 
-  depends_on = [azurerm_role_assignment.kv_admins]
+  depends_on = [
+    azurerm_private_endpoint.key_vault,
+    azurerm_role_assignment.kv_admins,
+  ]
 }
 
 resource "azurerm_key_vault_secret" "basic_auth_password" {
@@ -120,7 +154,10 @@ resource "azurerm_key_vault_secret" "basic_auth_password" {
   key_vault_id = azurerm_key_vault.main.id
   content_type = "text/plain"
 
-  depends_on = [azurerm_role_assignment.kv_admins]
+  depends_on = [
+    azurerm_private_endpoint.key_vault,
+    azurerm_role_assignment.kv_admins,
+  ]
 }
 
 resource "azurerm_key_vault_secret" "jwt" {
@@ -129,7 +166,10 @@ resource "azurerm_key_vault_secret" "jwt" {
   key_vault_id = azurerm_key_vault.main.id
   content_type = "text/plain"
 
-  depends_on = [azurerm_role_assignment.kv_admins]
+  depends_on = [
+    azurerm_private_endpoint.key_vault,
+    azurerm_role_assignment.kv_admins,
+  ]
 }
 
 output "appinsights_connection_string" {

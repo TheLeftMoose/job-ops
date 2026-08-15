@@ -7,6 +7,11 @@ locals {
   })
 }
 
+data "azurerm_private_dns_zone" "key_vault" {
+  name                = "privatelink.vaultcore.azure.net"
+  resource_group_name = var.tfstate_resource_group_name
+}
+
 module "other_foundation" {
   source                     = "./modules/instance-foundation"
   name_base                  = local.other_name_base
@@ -23,9 +28,11 @@ module "other_foundation" {
       github-deploy = azurerm_user_assigned_identity.github_deploy[0].principal_id
     } : {},
   )
-  kv_admin_ip_cidrs = var.kv_admin_ip_cidrs
-  basic_auth_user   = var.other_basic_auth_user
-  tags              = local.other_tags
+  kv_admin_ip_cidrs             = var.kv_admin_ip_cidrs
+  pe_subnet_id                  = module.network.pe_subnet_id
+  key_vault_private_dns_zone_id = data.azurerm_private_dns_zone.key_vault.id
+  basic_auth_user               = var.other_basic_auth_user
+  tags                          = local.other_tags
 }
 
 module "other_storage" {

@@ -16,6 +16,18 @@ variable "jobops_pe_subnet_name" {
   description = "Existing private-endpoint subnet."
 }
 
+variable "jobops_key_vault_name" {
+  type        = string
+  default     = "kv-jobops-prod-qw55jf"
+  description = "Existing production Key Vault that the deployment runner must reach privately."
+}
+
+variable "github_deploy_identity_name" {
+  type        = string
+  default     = "uami-jobops-prod-gh-deploy"
+  description = "Existing GitHub OIDC deployment identity."
+}
+
 variable "runner_subnet_prefix" {
   type        = string
   default     = "10.50.0.96/27"
@@ -75,6 +87,22 @@ data "azurerm_subnet" "private_endpoints" {
   resource_group_name  = data.azurerm_resource_group.jobops.name
 }
 
+data "azurerm_key_vault" "jobops" {
+  name                = var.jobops_key_vault_name
+  resource_group_name = data.azurerm_resource_group.jobops.name
+}
+
+data "azurerm_user_assigned_identity" "github_deploy" {
+  name                = var.github_deploy_identity_name
+  resource_group_name = data.azurerm_resource_group.jobops.name
+}
+
+resource "azurerm_role_assignment" "github_deploy_tfstate_reader" {
+  scope                = azurerm_resource_group.tfstate.id
+  role_definition_name = "Reader"
+  principal_id         = data.azurerm_user_assigned_identity.github_deploy.principal_id
+}
+
 resource "azurerm_private_dns_zone" "tfstate_blob" {
   name                = "privatelink.blob.core.windows.net"
   resource_group_name = azurerm_resource_group.tfstate.name
@@ -107,6 +135,41 @@ resource "azurerm_private_endpoint" "tfstate_blob" {
   private_dns_zone_group {
     name                 = "default"
     private_dns_zone_ids = [azurerm_private_dns_zone.tfstate_blob.id]
+  }
+}
+
+resource "azurerm_private_dns_zone" "key_vault" {
+  name                = "privatelink.vaultcore.azure.net"
+  resource_group_name = azurerm_resource_group.tfstate.name
+  tags                = local.runner_tags
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "key_vault" {
+  name                  = "vnl-jobops-key-vault"
+  resource_group_name   = azurerm_resource_group.tfstate.name
+  private_dns_zone_name = azurerm_private_dns_zone.key_vault.name
+  virtual_network_id    = data.azurerm_virtual_network.jobops.id
+  registration_enabled  = false
+  tags                  = local.runner_tags
+}
+
+resource "azurerm_private_endpoint" "jobops_key_vault" {
+  name                = "pe-${var.jobops_key_vault_name}-vault"
+  location            = data.azurerm_resource_group.jobops.location
+  resource_group_name = data.azurerm_resource_group.jobops.name
+  subnet_id           = data.azurerm_subnet.private_endpoints.id
+  tags                = local.runner_tags
+
+  private_service_connection {
+    name                           = "psc-${var.jobops_key_vault_name}-vault"
+    private_connection_resource_id = data.azurerm_key_vault.jobops.id
+    subresource_names              = ["vault"]
+    is_manual_connection           = false
+  }
+
+  private_dns_zone_group {
+    name                 = "default"
+    private_dns_zone_ids = [azurerm_private_dns_zone.key_vault.id]
   }
 }
 
@@ -233,6 +296,7 @@ resource "azurerm_linux_virtual_machine" "github_runner" {
   boot_diagnostics {}
 
   depends_on = [
+    azurerm_private_endpoint.jobops_key_vault,
     azurerm_private_endpoint.tfstate_blob,
     azurerm_subnet_nat_gateway_association.github_runner,
     azurerm_subnet_network_security_group_association.github_runner,
@@ -253,4 +317,8 @@ output "runner_private_ip_address" {
 
 output "tfstate_blob_private_endpoint_ip" {
   value = azurerm_private_endpoint.tfstate_blob.private_service_connection[0].private_ip_address
+}
+
+output "jobops_key_vault_private_endpoint_ip" {
+  value = azurerm_private_endpoint.jobops_key_vault.private_service_connection[0].private_ip_address
 }
