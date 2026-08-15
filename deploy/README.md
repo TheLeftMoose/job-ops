@@ -26,10 +26,12 @@ deploy/
 ├─ bootstrap/        One-off: creates RG + Storage Account for tfstate (local state)
 ├─ providers.tf      AzureRM + azapi + random; azurerm remote backend
 ├─ variables.tf
-├─ main.tf           Composes the four modules
+├─ main.tf           Composes the original production instance
+├─ jobops-other.tf   Adds the isolated second app in the shared ACA environment
 ├─ outputs.tf
 └─ modules/
    ├─ foundation/    Log Analytics, User-assigned MI, Key Vault (RBAC)
+   ├─ instance-foundation/  Per-instance identity, Key Vault, and App Insights
    ├─ storage/       Storage Account + Azure Files shares (data, codex-home)
    ├─ aca-env/       Container Apps Environment + env storage bindings
    └─ aca-app/       Container App (image, ingress, secrets, volume mounts, probes)
@@ -93,6 +95,16 @@ curl.exe -i "https://$fqdn/health"
 ## Notes
 
 - Single replica (SQLite). Deploys briefly take the app offline.
+- `jobops-other` shares `cae-jobops-prod`, its VNet, private DNS, and Log
+  Analytics workspace. It has a separate Container App, premium NFS storage
+  account/share, private endpoint, managed identity, Key Vault, generated
+  basic-auth/JWT credentials, and Application Insights resource.
+- The two apps share only the GHCR image and the existing `llm-api-key` secret.
+  The `jobops-other` identity receives secret-scoped read access to that one
+  integration secret; it cannot read the original app's auth or JWT secrets.
+- Terraform generates the `jobops-other` basic-auth password and JWT secret.
+  Their values are sensitive and live in the private Terraform state and the
+  new Key Vault; retrieve the basic-auth credentials explicitly from that vault.
 - Volumes: `/app/data` and `/app/codex-home` are Azure Files SMB shares.
 - Secrets are stored in Key Vault and surfaced into the app via the
   user-assigned managed identity using `secret { key_vault_secret_id = ... }`.

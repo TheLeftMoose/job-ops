@@ -48,3 +48,23 @@ output "appinsights_connection_string" {
   value     = module.foundation.appinsights_connection_string
   sensitive = true
 }
+
+output "other_container_app_name" {
+  value = module.other_aca_app.name
+}
+
+output "other_container_app_fqdn" {
+  value = module.other_aca_app.fqdn
+}
+
+output "other_container_app_url" {
+  value = "https://${module.other_aca_app.fqdn}"
+}
+
+output "other_key_vault_name" {
+  value = module.other_foundation.key_vault_name
+}
+
+output "other_storage_account_name" {
+  value = module.other_storage.storage_account_name
+}

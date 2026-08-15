@@ -14,6 +14,11 @@ variable "uami_id" { type = string }
 variable "uami_client_id" { type = string }
 variable "key_vault_id" { type = string }
 variable "key_vault_uri" { type = string }
+variable "llm_key_vault_uri" {
+  type        = string
+  default     = ""
+  description = "Optional separate Key Vault URI for the shared LLM API key."
+}
 variable "app_storage_name" { type = string }
 variable "llm_provider" {
   type    = string
@@ -38,7 +43,16 @@ variable "appinsights_connection_string" {
   sensitive   = true
   description = "Application Insights connection string. When non-empty it is injected as APPLICATIONINSIGHTS_CONNECTION_STRING (via an inline secret) so the app's Azure Monitor OpenTelemetry Distro activates."
 }
+variable "otel_service_name" {
+  type        = string
+  default     = "jobops-orchestrator"
+  description = "Cloud role name emitted to Application Insights."
+}
 variable "tags" { type = map(string) }
+
+locals {
+  effective_llm_key_vault_uri = var.llm_key_vault_uri != "" ? var.llm_key_vault_uri : var.key_vault_uri
+}
 
 resource "azurerm_container_app" "main" {
   name                         = "ca-${var.name_base}"
@@ -85,7 +99,7 @@ resource "azurerm_container_app" "main" {
 
   secret {
     name                = "llm-api-key"
-    key_vault_secret_id = "${var.key_vault_uri}secrets/llm-api-key"
+    key_vault_secret_id = "${local.effective_llm_key_vault_uri}secrets/llm-api-key"
     identity            = var.uami_id
   }
 
@@ -165,7 +179,7 @@ resource "azurerm_container_app" "main" {
       # Cloud role name shown in the Application Map / cloud_RoleName KQL.
       env {
         name  = "OTEL_SERVICE_NAME"
-        value = "jobops-orchestrator"
+        value = var.otel_service_name
       }
       dynamic "env" {
         for_each = var.appinsights_connection_string != "" ? [1] : []
