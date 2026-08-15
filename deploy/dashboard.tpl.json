@@ -44,9 +44,7 @@
               {
                 "name": "Scope",
                 "value": {
-                  "resourceIds": [
-                    "$${appinsights_id}"
-                  ]
+                  "resourceIds": ["$${appinsights_id}"]
                 },
                 "isOptional": true
               },
@@ -152,9 +150,7 @@
               {
                 "name": "Scope",
                 "value": {
-                  "resourceIds": [
-                    "$${appinsights_id}"
-                  ]
+                  "resourceIds": ["$${appinsights_id}"]
                 },
                 "isOptional": true
               },
@@ -265,9 +261,7 @@
               {
                 "name": "Scope",
                 "value": {
-                  "resourceIds": [
-                    "$${appinsights_id}"
-                  ]
+                  "resourceIds": ["$${appinsights_id}"]
                 },
                 "isOptional": true
               },
@@ -373,9 +367,7 @@
               {
                 "name": "Scope",
                 "value": {
-                  "resourceIds": [
-                    "$${appinsights_id}"
-                  ]
+                  "resourceIds": ["$${appinsights_id}"]
                 },
                 "isOptional": true
               },
@@ -458,9 +450,7 @@
               {
                 "name": "Scope",
                 "value": {
-                  "resourceIds": [
-                    "$${appinsights_id}"
-                  ]
+                  "resourceIds": ["$${appinsights_id}"]
                 },
                 "isOptional": true
               },
@@ -543,9 +533,7 @@
               {
                 "name": "Scope",
                 "value": {
-                  "resourceIds": [
-                    "$${appinsights_id}"
-                  ]
+                  "resourceIds": ["$${appinsights_id}"]
                 },
                 "isOptional": true
               },
@@ -656,9 +644,7 @@
               {
                 "name": "Scope",
                 "value": {
-                  "resourceIds": [
-                    "$${appinsights_id}"
-                  ]
+                  "resourceIds": ["$${appinsights_id}"]
                 },
                 "isOptional": true
               },
