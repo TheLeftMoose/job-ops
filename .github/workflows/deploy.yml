@@ -7,7 +7,7 @@ name: deploy
 # change VM power state; all resource configuration remains in Terraform.
 #
 # UX:
-#   action       = plan (default) | apply
+#   action       = plan (default) | apply | repair
 #   image_tag    = GHCR tag (default :edge) -> -var image=ghcr.io/.../job-ops:<tag>
 #   revision_suffix = optional -> -var revision_suffix=<value> (force re-pull
 #                  of KV-backed secrets after rotation)
@@ -20,9 +20,9 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: "plan or apply"
+        description: "plan, apply, or one-time state repair"
         type: choice
-        options: [plan, apply]
+        options: [plan, apply, repair]
         default: plan
         required: true
       image_tag:
@@ -126,6 +126,16 @@ jobs:
             -backend-config="container_name=${TFSTATE_CONTAINER}" \
             -backend-config="key=${TFSTATE_KEY}" \
             -backend-config="use_azuread_auth=true"
+
+      - name: Repair recovered private endpoint state
+        if: inputs.action == 'repair'
+        working-directory: deploy
+        env:
+          ARM_USE_OIDC: "true"
+          ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        run: terraform untaint 'module.other_foundation.azurerm_private_endpoint.key_vault[0]'
 
       - name: Terraform plan
         id: plan
