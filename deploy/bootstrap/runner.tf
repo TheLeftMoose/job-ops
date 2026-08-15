@@ -144,6 +144,12 @@ resource "azurerm_private_dns_zone" "key_vault" {
   tags                = local.runner_tags
 }
 
+resource "azurerm_role_assignment" "github_deploy_key_vault_dns_contributor" {
+  scope                = azurerm_private_dns_zone.key_vault.id
+  role_definition_name = "Private DNS Zone Contributor"
+  principal_id         = data.azurerm_user_assigned_identity.github_deploy.principal_id
+}
+
 resource "azurerm_private_dns_zone_virtual_network_link" "key_vault" {
   name                  = "vnl-jobops-key-vault"
   resource_group_name   = azurerm_resource_group.tfstate.name
