@@ -65,10 +65,10 @@ resource "azurerm_key_vault" "main" {
   enable_rbac_authorization     = true # azurerm 4.x; renamed in 5.x to rbac_authorization_enabled
   soft_delete_retention_days    = 7
   purge_protection_enabled      = true # IRREVERSIBLE per Azure: once true, cannot be turned off; destroying KV soft-deletes the name for 7 days minimum
-  public_network_access_enabled = true # Pinned: Defender auto-rem may flip to Disabled, which blocks operator/CI ops. Firewall (below) restricts to allowed IPs.
+  public_network_access_enabled = false
   tags                          = var.tags
 
-  # Policy #5: deny public, allow trusted Microsoft services (covers ACA secret resolution path).
+  # Retain explicit ACL defaults if public access is temporarily enabled for recovery.
   network_acls {
     default_action = "Deny"
     bypass         = "AzureServices"
