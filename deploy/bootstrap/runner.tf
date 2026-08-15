@@ -150,6 +150,10 @@ resource "azurerm_public_ip" "github_runner_nat" {
   sku                 = "Standard"
   zones               = ["1", "2", "3"]
   tags                = local.runner_tags
+
+  lifecycle {
+    ignore_changes = [ip_tags]
+  }
 }
 
 resource "azurerm_nat_gateway" "github_runner" {
