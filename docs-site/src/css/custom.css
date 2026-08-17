@@ -28,3 +28,28 @@
   --ifm-color-primary-lightest: oklch(0.79 0.1308 38.7559);
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
 }
+/* Keep detailed architecture diagrams readable inside the docs content column. */
+.architecture-diagram {
+  margin: 1rem 0;
+  overflow-x: auto;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: var(--ifm-global-radius);
+  background: #fff;
+  padding: 1rem;
+}
+
+.architecture-diagram img {
+  display: block;
+  width: 1000px;
+  max-width: none;
+  height: auto;
+  margin: 0 auto;
+}
+
+.architecture-diagram--wide img {
+  width: 1400px;
+}
+
+.architecture-diagram--extra-wide img {
+  width: 1800px;
+}

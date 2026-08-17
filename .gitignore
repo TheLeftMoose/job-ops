@@ -9,6 +9,7 @@ node_modules/
 **/.docusaurus/
 docs-site/.docusaurus/
 docs-site/build/
+docs-site/diagrams/architecture/generated/
 orchestrator/build/
 
 # Data directory (bind mount in Docker)
@@ -26,6 +27,7 @@ Thumbs.db
 
 # local temp artifacts
 tmp/
+.cache/
 
 # Virtual environment for Python
 .venv

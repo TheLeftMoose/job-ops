@@ -79,6 +79,17 @@ At generation time:
 2. AI picks up to remaining slots from AI-selectable projects.
 3. Final visible projects are applied to the generated resume.
 
+### Experience generation controls
+
+The Settings UI supports 2 experience modes:
+
+- **Keep all base experience** (default): preserve every visible role and its existing description.
+- **Tailor roles and bullets for each job**: select the strongest job-relevant roles and generate 3-5 evidence-based bullets for each one.
+
+Tailored mode also provides **Maximum roles in final CV**, from 1 to 20. Relevance is the primary selection rule; recency breaks close ties.
+
+The selected roles and bullets are stored with the job so PDF regeneration is deterministic. The base Resume Studio or Reactive Resume document is not modified.
+
 ## Setup and configuration
 
 ### Account requirements (important)
@@ -136,6 +147,15 @@ In **Settings → Reactive Resume**:
 3. Mark remaining projects as **AI selectable**.
 4. Save settings.
 
+### 5) Configure experience behavior
+
+In **Settings → CV Generation**:
+
+1. Choose **Keep base experience** or **Tailor roles and bullets**.
+2. For tailored mode, set **Maximum roles in final CV**.
+3. Save settings.
+4. Run full tailoring for a job to apply the new default.
+
 ## Runtime behavior
 
 ### During PDF generation
@@ -144,10 +164,11 @@ High-level flow:
 
 1. Load the local Resume Studio document.
 2. Apply tailored summary/headline/skills.
-3. Compute final visible projects from your selection rules.
-4. Optionally rewrite outbound links to tracer links (per-job toggle).
-5. Normalize the tailored resume data into JobOps' renderer document model.
-6. Render the PDF with the configured renderer:
+3. Apply the persisted tailored role selection and bullets when enabled.
+4. Compute final visible projects from your selection rules.
+5. Optionally rewrite outbound links to tracer links (per-job toggle).
+6. Normalize the tailored resume data into JobOps' renderer document model.
+7. Render the PDF with the configured renderer:
    - RxResume export
    - Local LaTeX with `tectonic`
    - Local Typst with `typst`
@@ -182,6 +203,7 @@ Current AI-driven edits are intentionally scoped:
 - `summary`
 - `headline/title`
 - `skills` and keywords
+- experience role selection and 3-5 bullets per selected role when tailored experience is enabled
 - project **visibility** (enable/disable per project)
 
 ### Local renderer dependency

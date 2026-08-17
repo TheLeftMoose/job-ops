@@ -137,6 +137,7 @@ Compatibility thread endpoints remain, but UI behavior is one thread per job.
 
 ## Related pages
 
+- [Generation Architecture](/docs/next/reference/generation-architecture)
 - [Settings](/docs/next/features/settings)
 - [Reactive Resume](/docs/next/features/reactive-resume)
 - [Orchestrator](/docs/next/features/orchestrator)

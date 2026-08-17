@@ -165,10 +165,10 @@ Open the **search links** row in the Ready summary to reveal the generated links
 
 PDF generation uses:
 
-- base resume selected from RxResume
+- the local Resume Studio document, with the configured Reactive Resume base as a fallback
 - job description
 - tailored summary/headline/skills/projects
-- the configured PDF renderer (`rxresume` export or local LaTeX via `tectonic`)
+- the configured PDF renderer (`rxresume`, local LaTeX via `tectonic`, or local Typst)
 
 Common paths:
 
@@ -233,6 +233,7 @@ curl -X POST "http://localhost:3001/api/jobs/<jobId>/generate-pdf"
 
 ## Related pages
 
+- [Generation Architecture](/docs/next/reference/generation-architecture)
 - [Job Search Bar](/docs/next/features/job-search-bar)
 - [Pipeline Run](/docs/next/features/pipeline-run)
 - [Ghostwriter](/docs/next/features/ghostwriter)

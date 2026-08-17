@@ -43,6 +43,13 @@ The AI assistant is ephemeral. Closing the field assistant clears that short con
 
 AI field editing uses the same LLM connection, tailoring model overrides, writing style, and output language settings used by resume tailoring. It edits the reusable baseline resume only; job-specific rewrites still belong in job tailoring and Ghostwriter.
 
+Your base resume can keep a long, complete employment history. In **Settings → CV Generation**, choose whether job-specific CVs:
+
+- keep every visible experience entry unchanged, or
+- select up to a configured number of relevant roles and generate 3-5 source-grounded bullets for each role
+
+Tailored experience is stored on the job and can be reviewed in the job tailoring workspace. It never overwrites the Resume Studio source document.
+
 When Resume Studio changes, ready jobs with system-generated PDFs are queued for automatic regeneration. Until the queue catches up, those jobs show a `PDF stale` indicator and keep the old PDF available as **View old PDF** / **Download old PDF**.
 
 Current v1 scope:
@@ -61,6 +68,8 @@ Current v1 scope:
   Re-import from a Reactive Resume v5 base resume. Older local documents are no longer auto-converted.
 - Changes do not appear in a generated PDF:
   Ready jobs that already use system-generated PDFs are auto-queued for regeneration after Resume Studio edits. If a job shows `PDF stale`, JobOps is keeping the old PDF available while the new one is queued or regenerating.
+- Experience settings changed but an existing job still uses the old role selection:
+  Run **Generate all** or **Generate** in the job's Experience tailoring section. Global experience settings apply on the next tailoring run; JobOps does not automatically spend LLM usage re-tailoring every existing job.
 - AI field editing fails:
   Check the LLM provider and tailoring model settings in **Settings**. The assistant uses the same model configuration as resume tailoring.
 - Picture upload fails:
@@ -70,6 +79,7 @@ Current v1 scope:
 
 ## Related pages
 
+- [Generation Architecture](/docs/next/reference/generation-architecture)
 - [Reactive Resume](./reactive-resume)
 - [Settings](./settings)
 - [Orchestrator](./orchestrator)

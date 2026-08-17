@@ -77,7 +77,32 @@ const sidebars: SidebarsConfig = {
     {
       type: "category",
       label: "Reference / FAQ",
-      items: ["reference/faq", "reference/documentation-style-guide"],
+      items: [
+        "reference/faq",
+        {
+          type: "category",
+          label: "Application Architecture",
+          items: [
+            "reference/application-architecture",
+            "reference/architecture-system-context",
+            "reference/architecture-containers",
+            "reference/architecture-backend-components",
+            "reference/architecture-deployment",
+          ],
+        },
+        {
+          type: "category",
+          label: "Generation Architecture",
+          items: [
+            "reference/generation-architecture",
+            "reference/architecture-generation-flow",
+            "reference/cv-generation-architecture",
+            "reference/application-kit-architecture",
+            "reference/extending-generation",
+          ],
+        },
+        "reference/documentation-style-guide",
+      ],
     },
   ],
 };
