@@ -90,6 +90,46 @@ OUTPUT FORMAT (JSON):
 }
 `.trim(),
   },
+  experienceTailoringPromptTemplate: {
+    label: "Experience tailoring prompt",
+    description:
+      "Controls how AI selects relevant roles and compresses longer experience histories into 3-5 evidence-based bullets per role.",
+    placeholders: [
+      "jobDescription",
+      "experienceCandidatesJson",
+      "maxRoles",
+      "outputLanguage",
+      "tone",
+      "formality",
+      "constraintsBullet",
+      "avoidTermsBullet",
+    ] as const,
+    defaultTemplate: `
+You are tailoring the experience section of a resume for one job application.
+
+JOB DESCRIPTION:
+{{jobDescription}}
+
+EXPERIENCE CANDIDATES:
+{{experienceCandidatesJson}}
+
+INSTRUCTIONS:
+- Select at most {{maxRoles}} roles with the strongest evidence for this job.
+- Prefer more recent roles when two roles are equally relevant.
+- For every selected role, summarize and consolidate its sourceText into 3 to 5 concise achievement bullets.
+- When sourceText contains a long bullet list, combine overlapping points and keep the strongest job-relevant evidence.
+- Preserve distinct accomplishments instead of merely shortening the first 3 to 5 source bullets.
+- Keep the source resume's facts. Do not invent employers, dates, technologies, scope, metrics, or outcomes.
+- Every generated bullet must be supported by that role's sourceText.
+- Use exact job-description terminology only when it truthfully matches the source evidence.
+- Write bullets in {{outputLanguage}}.
+- Tone: {{tone}}.
+- Formality: {{formality}}.
+{{constraintsBullet}}
+{{avoidTermsBullet}}
+- Return only the structured JSON response requested by the application.
+`.trim(),
+  },
   scoringPromptTemplate: {
     label: "Job scoring prompt",
     description:

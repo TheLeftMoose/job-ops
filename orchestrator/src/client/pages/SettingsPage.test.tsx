@@ -159,6 +159,11 @@ const openPromptTemplatesSection = async () => {
   await clickLastButtonByName(/prompt templates/i);
 };
 
+const openCvGenerationSection = async () => {
+  await openNavGroup(/^ai$/i);
+  await clickLastButtonByName(/cv generation/i);
+};
+
 const openReactiveResumeSection = async () => {
   await openNavGroup(/^integrations$/i);
   await clickLastButtonByName(/reactive resume/i);
@@ -247,6 +252,20 @@ describe("SettingsPage", () => {
       }),
     );
     expect(toast.success).toHaveBeenCalledWith("Settings saved");
+  });
+
+  it("exposes experience generation independently of Reactive Resume", async () => {
+    vi.mocked(api.getSettings).mockResolvedValue(baseSettings);
+
+    renderPage();
+    await openCvGenerationSection();
+
+    expect(
+      await screen.findByRole("heading", { name: /cv generation/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /tailor roles and bullets/i }),
+    ).toBeInTheDocument();
   });
 
   it("starts codex sign-in from model settings", async () => {

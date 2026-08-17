@@ -121,6 +121,9 @@ describe.sequential("Settings API routes", () => {
     expect(body.data.tailoringPromptTemplate.value).toBe(
       getDefaultPromptTemplate("tailoringPromptTemplate"),
     );
+    expect(body.data.experienceTailoringPromptTemplate.value).toBe(
+      getDefaultPromptTemplate("experienceTailoringPromptTemplate"),
+    );
     expect(body.data.scoringPromptTemplate.value).toBe(
       getDefaultPromptTemplate("scoringPromptTemplate"),
     );

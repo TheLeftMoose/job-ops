@@ -18,7 +18,7 @@ It lets you configure:
 - Display and writing-style defaults
 - Editable prompt templates for core AI workflows
 - Service credentials and workspace users
-- Reactive Resume project selection
+- Resume experience generation and Reactive Resume project selection
 - Tracer Links readiness verification
 - Backup and scoring rules
 - Data-clearing actions in the Danger Zone
@@ -147,17 +147,29 @@ Defaults and constraints:
 - Edit the base templates for:
   - Ghostwriter system prompt
   - Resume tailoring prompt
+  - Experience tailoring prompt
   - Job scoring prompt
 - Each editor starts from the current effective template, not a blank override
 - Supported placeholders are shown inline for each template
 - Job scoring always appends minified normalized source-job JSON, including `null` values, plus the required output contract
 - The same scoring call may propose evidence-backed corrections to existing job facts. JobOps only accepts whitelisted, schema-valid values supported by an excerpt from the listing; these mandatory safety instructions remain appended even when you customize the scoring template
-- Use **Reset** to restore a single template, or **Reset all prompts** to restore all three
+- The experience template controls how long source descriptions are consolidated into 3-5 role-specific bullets. Keep the evidence and no-invention instructions when customizing it.
+- Use **Reset** to restore a single template, or **Reset all prompts** to restore all prompts
 - Template editing is intentionally advanced:
   - removing key instructions can degrade output quality
   - removing placeholders can strip important runtime data from the prompt
   - resetting restores the shared default templates
 - Existing writing-style, language, and scoring-instructions settings still matter because the default templates consume those values through placeholders
+
+### CV Generation
+
+- Choose **Keep base experience** to include every visible role with its original description. This is the default.
+- Choose **Tailor roles and bullets** to let JobOps select the roles most relevant to each job and consolidate long descriptions into 3-5 evidence-based bullets per role.
+- Set **Maximum roles in final CV** from 1 to 20.
+- Role selection prioritizes job relevance and uses recency as a tie-breaker.
+- Changes apply on the next full tailoring run; they do not automatically re-tailor existing ready jobs.
+- Customize the bullet-generation instructions in **Prompt Templates → Experience tailoring prompt**.
+- These controls apply to Reactive Resume, LaTeX, and Typst output. The base Resume Studio document is not modified.
 
 ### Reactive Resume
 
@@ -306,6 +318,13 @@ curl -X POST "http://localhost:3001/api/backups"
 - If you want a specific language every time, switch to **Manual** and select that language explicitly.
 - If you use **Match Resume**, make sure your resume/profile text has enough content in the target language for detection.
 - If detection is ambiguous, JobOps falls back to English by design.
+
+### My generated CV still includes every role
+
+- Open **Settings → CV Generation** and choose **Tailor roles and bullets**.
+- Set the maximum number of roles to include and save.
+- Return to the job tailoring workspace and run **Generate all**, or open **Experience** and click **Generate**.
+- The setting does not rewrite existing jobs automatically because that would spend LLM usage without an explicit generation action.
 
 ### My headline or target job title did not get translated
 

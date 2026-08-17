@@ -14,6 +14,8 @@ import { trackServerProductEvent } from "@infra/product-analytics";
 import { runWithRequestContext } from "@infra/request-context";
 import { getPrivateDataScope } from "@server/tenancy/private-scope";
 import { createLocationIntentFromLegacyInputs } from "@shared/location-domain.js";
+import { settingsRegistry } from "@shared/settings-registry";
+import { tailoredExperienceSchema } from "@shared/tailored-experience.js";
 import type {
   JobStatus,
   PipelineConfig,
@@ -23,6 +25,7 @@ import { getDataDir } from "../config/dataDir";
 import * as jobsRepo from "../repositories/jobs";
 import * as pipelineRepo from "../repositories/pipeline";
 import * as settingsRepo from "../repositories/settings";
+import { generateExperienceTailoring } from "../services/experience-tailoring";
 import {
   refundHostedUsageReservation,
   reserveHostedUsage,
@@ -618,7 +621,7 @@ export async function runPipeline(
 
 export type ProcessJobOptions = {
   force?: boolean;
-  fields?: Array<"summary" | "headline" | "skills">;
+  fields?: Array<"summary" | "headline" | "skills" | "experience">;
   requestOrigin?: string | null;
   analyticsOrigin?:
     | "move_to_ready"
@@ -672,6 +675,7 @@ export async function summarizeJob(
       let tailoredSummary = job.tailoredSummary;
       let tailoredHeadline = job.tailoredHeadline;
       let tailoredSkills = job.tailoredSkills;
+      let tailoredExperience = job.tailoredExperience;
       const requestedFields = options?.fields;
       const shouldUpdateAllTailoring = !requestedFields?.length;
       const shouldUpdateSummary =
@@ -680,6 +684,8 @@ export async function summarizeJob(
         shouldUpdateAllTailoring || requestedFields.includes("headline");
       const shouldUpdateSkills =
         shouldUpdateAllTailoring || requestedFields.includes("skills");
+      const shouldUpdateExperience =
+        shouldUpdateAllTailoring || requestedFields.includes("experience");
       const shouldGenerateTailoring =
         shouldUpdateSummary || shouldUpdateHeadline || shouldUpdateSkills;
 
@@ -714,6 +720,38 @@ export async function summarizeJob(
             success: false,
             error: `Tailoring failed: ${tailoringResult.error || "unknown error"}`,
           };
+        }
+      }
+
+      if (shouldUpdateExperience) {
+        const rawResumeExperience =
+          await settingsRepo.getSetting("resumeExperience");
+        const resumeExperience =
+          settingsRegistry.resumeExperience.parse(
+            rawResumeExperience ?? undefined,
+          ) ?? settingsRegistry.resumeExperience.default();
+
+        if (resumeExperience.mode === "preserve") {
+          tailoredExperience = null;
+        } else if (!tailoredExperience || options?.force) {
+          jobLogger.info("Generating tailored experience", {
+            maxRoles: resumeExperience.maxRoles,
+          });
+          await reserveTailoringUsage();
+          const experienceResult = await generateExperienceTailoring({
+            jobDescription: job.jobDescription || "",
+            profile,
+            maxRoles: resumeExperience.maxRoles,
+          });
+          if (!experienceResult.success) {
+            await settleTailoringUsage();
+            return {
+              success: false,
+              error: `Experience tailoring failed: ${experienceResult.error}`,
+            };
+          }
+          tailoringUsageSucceeded = true;
+          tailoredExperience = JSON.stringify(experienceResult.data);
         }
       }
 
@@ -788,6 +826,7 @@ export async function summarizeJob(
         ...(shouldUpdateSkills
           ? { tailoredSkills: tailoredSkills ?? undefined }
           : {}),
+        ...(shouldUpdateExperience ? { tailoredExperience } : {}),
         ...(shouldUpdateAllTailoring
           ? { selectedProjectIds: selectedProjectIds ?? undefined }
           : {}),
@@ -871,6 +910,9 @@ export async function generateFinalPdf(
           summary: job.tailoredSummary || "",
           headline: job.tailoredHeadline || "",
           skills: job.tailoredSkills ? JSON.parse(job.tailoredSkills) : [],
+          experience: job.tailoredExperience
+            ? tailoredExperienceSchema.parse(JSON.parse(job.tailoredExperience))
+            : null,
         },
         job.jobDescription || "",
         undefined, // deprecated baseResumePath parameter

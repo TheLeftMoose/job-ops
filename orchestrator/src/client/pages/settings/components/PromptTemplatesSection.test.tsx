@@ -11,6 +11,7 @@ const PromptTemplatesHarness = () => {
     defaultValues: {
       ghostwriterSystemPromptTemplate: "Custom Ghostwriter",
       tailoringPromptTemplate: "Custom Tailoring",
+      experienceTailoringPromptTemplate: "Custom Experience Tailoring",
       scoringPromptTemplate: "Custom Scoring",
     },
   });
@@ -29,6 +30,12 @@ const PromptTemplatesHarness = () => {
             tailoringPromptTemplate: {
               effective: "Custom Tailoring",
               default: getDefaultPromptTemplate("tailoringPromptTemplate"),
+            },
+            experienceTailoringPromptTemplate: {
+              effective: "Custom Experience Tailoring",
+              default: getDefaultPromptTemplate(
+                "experienceTailoringPromptTemplate",
+              ),
             },
             scoringPromptTemplate: {
               effective: "Custom Scoring",
@@ -52,6 +59,9 @@ describe("PromptTemplatesSection", () => {
     ).toBeInTheDocument();
     expect(screen.getAllByText("{{tone}}").length).toBeGreaterThan(0);
     expect(screen.getAllByText("{{profileJson}}").length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("{{experienceCandidatesJson}}").length,
+    ).toBeGreaterThan(0);
     expect(
       screen.getAllByText("{{scoringInstructionsText}}").length,
     ).toBeGreaterThan(0);
@@ -77,6 +87,9 @@ describe("PromptTemplatesSection", () => {
     );
     expect(screen.getByLabelText(/resume tailoring prompt/i)).toHaveValue(
       getDefaultPromptTemplate("tailoringPromptTemplate"),
+    );
+    expect(screen.getByLabelText(/experience tailoring prompt/i)).toHaveValue(
+      getDefaultPromptTemplate("experienceTailoringPromptTemplate"),
     );
     expect(screen.getByLabelText(/job scoring prompt/i)).toHaveValue(
       getDefaultPromptTemplate("scoringPromptTemplate"),

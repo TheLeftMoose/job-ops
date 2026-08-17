@@ -1,5 +1,13 @@
 import * as api from "@client/api";
-import type { Job, ResumeProjectCatalogItem } from "@shared/types.js";
+import {
+  parseTailoredExperience,
+  serializeTailoredExperience,
+} from "@shared/tailored-experience.js";
+import type {
+  Job,
+  ResumeProjectCatalogItem,
+  TailoredExperienceEntry,
+} from "@shared/types.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createTailoredSkillDraftId,
@@ -27,6 +35,7 @@ export interface TailoringSavePayload {
   tailoredSummary: string;
   tailoredHeadline: string;
   tailoredSkills: string;
+  tailoredExperience: string | null;
   jobDescription: string;
   selectedProjectIds: string;
   tracerLinksEnabled: boolean;
@@ -39,6 +48,7 @@ export const getTailoringSavePayloadKey = (
     tailoredSummary: payload.tailoredSummary,
     tailoredHeadline: payload.tailoredHeadline,
     tailoredSkills: payload.tailoredSkills,
+    tailoredExperience: payload.tailoredExperience,
     jobDescription: payload.jobDescription,
     selectedProjectIds: toSelectedIdsCsv(
       parseSelectedIds(payload.selectedProjectIds),
@@ -57,6 +67,13 @@ const parseIncomingDraft = (incomingJob: Job) => {
   const skillsJson = serializeTailoredSkills(
     fromEditableSkillGroups(skillsDraft),
   );
+  const experienceEnabled = incomingJob.tailoredExperience !== null;
+  const experienceDraft = parseTailoredExperience(
+    incomingJob.tailoredExperience,
+  );
+  const experienceJson = experienceEnabled
+    ? serializeTailoredExperience(experienceDraft)
+    : null;
   const tracerLinksEnabled = Boolean(incomingJob.tracerLinksEnabled);
 
   return {
@@ -66,6 +83,9 @@ const parseIncomingDraft = (incomingJob: Job) => {
     selectedIds,
     skillsDraft,
     skillsJson,
+    experienceEnabled,
+    experienceDraft,
+    experienceJson,
     tracerLinksEnabled,
   };
 };
@@ -92,6 +112,12 @@ export function useTailoringDraft({
   const [skillsDraft, setSkillsDraft] = useState<EditableSkillGroup[]>(() =>
     toEditableSkillGroups(parseTailoredSkills(job.tailoredSkills)),
   );
+  const [experienceEnabled, setExperienceEnabled] = useState(
+    job.tailoredExperience !== null,
+  );
+  const [experienceDraft, setExperienceDraft] = useState<
+    TailoredExperienceEntry[]
+  >(() => parseTailoredExperience(job.tailoredExperience));
   const [openSkillGroupId, setOpenSkillGroupId] = useState<string>("");
   const [tracerLinksEnabled, setTracerLinksEnabled] = useState(
     Boolean(job.tracerLinksEnabled),
@@ -110,6 +136,14 @@ export function useTailoringDraft({
   const [savedSkillsJson, setSavedSkillsJson] = useState(() =>
     serializeTailoredSkills(parseTailoredSkills(job.tailoredSkills)),
   );
+  const [savedExperienceJson, setSavedExperienceJson] = useState<string | null>(
+    () =>
+      job.tailoredExperience !== null
+        ? serializeTailoredExperience(
+            parseTailoredExperience(job.tailoredExperience),
+          )
+        : null,
+  );
   const [savedTracerLinksEnabled, setSavedTracerLinksEnabled] = useState(
     Boolean(job.tracerLinksEnabled),
   );
@@ -120,6 +154,11 @@ export function useTailoringDraft({
   const skillsJson = useMemo(
     () => serializeTailoredSkills(fromEditableSkillGroups(skillsDraft)),
     [skillsDraft],
+  );
+  const experienceJson = useMemo(
+    () =>
+      experienceEnabled ? serializeTailoredExperience(experienceDraft) : null,
+    [experienceDraft, experienceEnabled],
   );
 
   const selectedIdsCsv = useMemo(
@@ -132,6 +171,7 @@ export function useTailoringDraft({
     if (headline !== savedHeadline) return true;
     if (jobDescription !== savedDescription) return true;
     if (skillsJson !== savedSkillsJson) return true;
+    if (experienceJson !== savedExperienceJson) return true;
     if (tracerLinksEnabled !== savedTracerLinksEnabled) return true;
     return hasSelectionDiff(selectedIds, savedSelectedIds);
   }, [
@@ -143,6 +183,8 @@ export function useTailoringDraft({
     savedDescription,
     skillsJson,
     savedSkillsJson,
+    experienceJson,
+    savedExperienceJson,
     tracerLinksEnabled,
     savedTracerLinksEnabled,
     selectedIds,
@@ -155,6 +197,7 @@ export function useTailoringDraft({
         tailoredSummary: savedSummary,
         tailoredHeadline: savedHeadline,
         tailoredSkills: savedSkillsJson,
+        tailoredExperience: savedExperienceJson,
         jobDescription: savedDescription,
         selectedProjectIds: toSelectedIdsCsv(savedSelectedIds),
         tracerLinksEnabled: savedTracerLinksEnabled,
@@ -163,6 +206,7 @@ export function useTailoringDraft({
       savedSummary,
       savedHeadline,
       savedSkillsJson,
+      savedExperienceJson,
       savedDescription,
       savedSelectedIds,
       savedTracerLinksEnabled,
@@ -176,11 +220,14 @@ export function useTailoringDraft({
     setJobDescription(next.description);
     setSelectedIds(next.selectedIds);
     setSkillsDraft(next.skillsDraft);
+    setExperienceEnabled(next.experienceEnabled);
+    setExperienceDraft(next.experienceDraft);
     setSavedSummary(next.summary);
     setSavedHeadline(next.headline);
     setSavedDescription(next.description);
     setSavedSelectedIds(next.selectedIds);
     setSavedSkillsJson(next.skillsJson);
+    setSavedExperienceJson(next.experienceJson);
     setTracerLinksEnabled(next.tracerLinksEnabled);
     setSavedTracerLinksEnabled(next.tracerLinksEnabled);
   }, []);
@@ -191,6 +238,7 @@ export function useTailoringDraft({
     setSavedDescription(snapshot.jobDescription);
     setSavedSelectedIds(parseSelectedIds(snapshot.selectedProjectIds));
     setSavedSkillsJson(snapshot.tailoredSkills);
+    setSavedExperienceJson(snapshot.tailoredExperience);
     setSavedTracerLinksEnabled(snapshot.tracerLinksEnabled);
   }, []);
 
@@ -201,6 +249,7 @@ export function useTailoringDraft({
     setSavedDescription(next.description);
     setSavedSelectedIds(next.selectedIds);
     setSavedSkillsJson(next.skillsJson);
+    setSavedExperienceJson(next.experienceJson);
     setSavedTracerLinksEnabled(next.tracerLinksEnabled);
   }, []);
 
@@ -294,6 +343,32 @@ export function useTailoringDraft({
     setSkillsDraft((prev) => prev.filter((group) => group.id !== id));
   }, []);
 
+  const handleUpdateExperienceBullet = useCallback(
+    (entryIndex: number, bulletIndex: number, value: string) => {
+      setExperienceEnabled(true);
+      setExperienceDraft((previous) =>
+        previous.map((entry, currentEntryIndex) =>
+          currentEntryIndex !== entryIndex
+            ? entry
+            : {
+                ...entry,
+                bullets: entry.bullets.map((bullet, currentBulletIndex) =>
+                  currentBulletIndex === bulletIndex ? value : bullet,
+                ),
+              },
+        ),
+      );
+    },
+    [],
+  );
+
+  const handleRemoveExperienceRole = useCallback((entryIndex: number) => {
+    setExperienceEnabled(true);
+    setExperienceDraft((previous) =>
+      previous.filter((_, currentIndex) => currentIndex !== entryIndex),
+    );
+  }, []);
+
   return {
     catalog,
     isCatalogLoading,
@@ -310,6 +385,8 @@ export function useTailoringDraft({
     openSkillGroupId,
     setOpenSkillGroupId,
     skillsJson,
+    experienceDraft,
+    experienceJson,
     tracerLinksEnabled,
     setTracerLinksEnabled,
     isDirty,
@@ -321,5 +398,7 @@ export function useTailoringDraft({
     handleAddSkillGroup,
     handleUpdateSkillGroup,
     handleRemoveSkillGroup,
+    handleUpdateExperienceBullet,
+    handleRemoveExperienceRole,
   };
 }

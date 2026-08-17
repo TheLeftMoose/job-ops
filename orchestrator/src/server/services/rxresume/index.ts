@@ -8,7 +8,10 @@ import {
   rewriteResumeLinksWithTracer,
 } from "@server/services/tracer-links";
 import { getActiveTenantId } from "@server/tenancy/context";
-import type { ResumeProjectCatalogItem } from "@shared/types";
+import type {
+  ResumeProjectCatalogItem,
+  TailoredExperienceEntry,
+} from "@shared/types";
 import {
   getResumeSchemaValidationMessage,
   safeParseV5ResumeData,
@@ -384,6 +387,7 @@ export async function prepareTailoredResumeForPdf(args: {
     summary?: string | null;
     headline?: string | null;
     skills?: TailoredSkillsInput;
+    experience?: TailoredExperienceEntry[] | null;
   };
   jobDescription: string;
   selectedProjectIds?: string | null;

@@ -56,7 +56,12 @@ interface TailoringBaseline {
 }
 
 type AutosaveStatus = "saved" | "unsaved" | "saving" | "error";
-type TailoringGenerateTarget = "all" | "summary" | "headline" | "skills";
+type TailoringGenerateTarget =
+  | "all"
+  | "summary"
+  | "headline"
+  | "skills"
+  | "experience";
 
 const AutosaveStatusIcon: React.FC<{ status: AutosaveStatus }> = ({
   status,
@@ -111,6 +116,7 @@ const toSavePayloadFromJob = (job: Job): TailoringSavePayload => ({
   tailoredSummary: job.tailoredSummary ?? "",
   tailoredHeadline: job.tailoredHeadline ?? "",
   tailoredSkills: normalizeSkillsJson(job.tailoredSkills),
+  tailoredExperience: job.tailoredExperience,
   jobDescription: job.jobDescription ?? "",
   selectedProjectIds: job.selectedProjectIds ?? "",
   tracerLinksEnabled: Boolean(job.tracerLinksEnabled),
@@ -137,6 +143,8 @@ export const TailoringWorkspace: React.FC<TailoringWorkspaceProps> = (
     openSkillGroupId,
     setOpenSkillGroupId,
     skillsJson,
+    experienceDraft,
+    experienceJson,
     isDirty,
     savedPayloadKey,
     applyIncomingDraft,
@@ -146,6 +154,8 @@ export const TailoringWorkspace: React.FC<TailoringWorkspaceProps> = (
     handleAddSkillGroup,
     handleUpdateSkillGroup,
     handleRemoveSkillGroup,
+    handleUpdateExperienceBullet,
+    handleRemoveExperienceRole,
   } = useTailoringDraft({
     job: props.job,
     onDirtyChange: props.onDirtyChange,
@@ -205,6 +215,7 @@ export const TailoringWorkspace: React.FC<TailoringWorkspaceProps> = (
       tailoredSummary: summary,
       tailoredHeadline: headline,
       tailoredSkills: skillsJson,
+      tailoredExperience: experienceJson,
       jobDescription,
       selectedProjectIds: selectedIdsCsv,
       tracerLinksEnabled,
@@ -213,6 +224,7 @@ export const TailoringWorkspace: React.FC<TailoringWorkspaceProps> = (
       summary,
       headline,
       skillsJson,
+      experienceJson,
       jobDescription,
       selectedIdsCsv,
       tracerLinksEnabled,
@@ -421,6 +433,10 @@ export const TailoringWorkspace: React.FC<TailoringWorkspaceProps> = (
     await handleGenerateTailoring("skills");
   }, [handleGenerateTailoring]);
 
+  const handleGenerateExperience = useCallback(async () => {
+    await handleGenerateTailoring("experience");
+  }, [handleGenerateTailoring]);
+
   const handleGeneratePdf = useCallback(async () => {
     try {
       const shouldProceed = props.onBeforeGenerate
@@ -484,6 +500,8 @@ export const TailoringWorkspace: React.FC<TailoringWorkspaceProps> = (
       headline,
       jobDescription,
       skillsDraft,
+      experienceDraft,
+      resumeExperienceSettings: settings?.resumeExperience.value ?? null,
       selectedIds,
       resumeProjectsSettings: settings?.resumeProjects.value ?? null,
       isResumeProjectsSettingsLoading: isSettingsLoading,
@@ -494,7 +512,8 @@ export const TailoringWorkspace: React.FC<TailoringWorkspaceProps> = (
       generatingSection:
         generateTarget === "summary" ||
         generateTarget === "headline" ||
-        generateTarget === "skills"
+        generateTarget === "skills" ||
+        generateTarget === "experience"
           ? generateTarget
           : null,
       openSkillGroupId,
@@ -502,6 +521,7 @@ export const TailoringWorkspace: React.FC<TailoringWorkspaceProps> = (
       onGenerateSummary: handleGenerateSummary,
       onGenerateHeadline: handleGenerateHeadline,
       onGenerateSkills: handleGenerateSkills,
+      onGenerateExperience: handleGenerateExperience,
       onSummaryChange: setSummary,
       onHeadlineChange: setHeadline,
       onUndoSummary: handleUndoSummary,
@@ -527,6 +547,8 @@ export const TailoringWorkspace: React.FC<TailoringWorkspaceProps> = (
       onAddSkillGroup: handleAddSkillGroup,
       onUpdateSkillGroup: handleUpdateSkillGroup,
       onRemoveSkillGroup: handleRemoveSkillGroup,
+      onUpdateExperienceBullet: handleUpdateExperienceBullet,
+      onRemoveExperienceRole: handleRemoveExperienceRole,
       onToggleProject: handleToggleProject,
       onTracerLinksEnabledChange: setTracerLinksEnabled,
     }),
@@ -537,8 +559,10 @@ export const TailoringWorkspace: React.FC<TailoringWorkspaceProps> = (
       headline,
       jobDescription,
       skillsDraft,
+      experienceDraft,
       selectedIds,
       settings?.resumeProjects.value,
+      settings?.resumeExperience.value,
       isSettingsLoading,
       tracerLinksEnabled,
       tracerEnableBlocked,
@@ -550,6 +574,7 @@ export const TailoringWorkspace: React.FC<TailoringWorkspaceProps> = (
       handleGenerateSummary,
       handleGenerateHeadline,
       handleGenerateSkills,
+      handleGenerateExperience,
       setSummary,
       setHeadline,
       handleUndoSummary,
@@ -567,6 +592,8 @@ export const TailoringWorkspace: React.FC<TailoringWorkspaceProps> = (
       handleAddSkillGroup,
       handleUpdateSkillGroup,
       handleRemoveSkillGroup,
+      handleUpdateExperienceBullet,
+      handleRemoveExperienceRole,
       handleToggleProject,
       setTracerLinksEnabled,
     ],

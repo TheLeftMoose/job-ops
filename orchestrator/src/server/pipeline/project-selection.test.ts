@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as jobsRepo from "../repositories/jobs";
 import * as settingsRepo from "../repositories/settings";
+import { generateExperienceTailoring } from "../services/experience-tailoring";
 import { getProfile } from "../services/profile";
 import { pickProjectIdsForJob } from "../services/projectSelection";
 import { summarizeJob } from "./orchestrator";
@@ -37,6 +38,10 @@ vi.mock("../repositories/settings", () => ({
 
 vi.mock("../services/pdf", () => ({
   generatePdf: vi.fn(),
+}));
+
+vi.mock("../services/experience-tailoring", () => ({
+  generateExperienceTailoring: vi.fn(),
 }));
 
 vi.mock("../services/pdf-fingerprint", () => ({
@@ -144,6 +149,79 @@ describe("summarizeJob project selection", () => {
       expect.objectContaining({
         selectedProjectIds: "mumtaz-urdu",
       }),
+    );
+  });
+
+  it("persists selected roles for targeted experience generation", async () => {
+    vi.mocked(jobsRepo.getJobById).mockResolvedValue({
+      id: "job-1",
+      jobDescription: "Data acquisition engineer role.",
+      tailoredSummary: "Existing summary.",
+      tailoredHeadline: "Existing headline.",
+      tailoredSkills: JSON.stringify(["TypeScript"]),
+      tailoredExperience: null,
+      selectedProjectIds: "mumtaz-urdu",
+    } as any);
+    vi.mocked(settingsRepo.getSetting).mockImplementation(async (key) => {
+      if (key === "resumeExperience") {
+        return JSON.stringify({ mode: "tailored", maxRoles: 4 });
+      }
+      return null;
+    });
+    vi.mocked(generateExperienceTailoring).mockResolvedValue({
+      success: true,
+      data: [
+        {
+          experienceId: "experience-1",
+          roleId: null,
+          company: "Acme",
+          position: "Engineer",
+          period: "2024",
+          bullets: ["Built APIs", "Led delivery", "Improved reliability"],
+        },
+      ],
+    });
+
+    const result = await summarizeJob("job-1", {
+      force: true,
+      fields: ["experience"],
+    });
+
+    expect(result).toEqual({ success: true });
+    expect(generateExperienceTailoring).toHaveBeenCalledWith({
+      jobDescription: "Data acquisition engineer role.",
+      profile: profileWithProjects,
+      maxRoles: 4,
+    });
+    expect(jobsRepo.updateJob).toHaveBeenCalledWith(
+      "job-1",
+      expect.objectContaining({
+        tailoredExperience: expect.stringContaining('"experience-1"'),
+      }),
+    );
+  });
+
+  it("clears tailored roles when preserve mode is selected", async () => {
+    vi.mocked(jobsRepo.getJobById).mockResolvedValue({
+      id: "job-1",
+      jobDescription: "Data acquisition engineer role.",
+      tailoredSummary: "Existing summary.",
+      tailoredHeadline: "Existing headline.",
+      tailoredSkills: JSON.stringify(["TypeScript"]),
+      tailoredExperience: '[{"experienceId":"old"}]',
+      selectedProjectIds: "mumtaz-urdu",
+    } as any);
+
+    const result = await summarizeJob("job-1", {
+      force: true,
+      fields: ["experience"],
+    });
+
+    expect(result).toEqual({ success: true });
+    expect(generateExperienceTailoring).not.toHaveBeenCalled();
+    expect(jobsRepo.updateJob).toHaveBeenCalledWith(
+      "job-1",
+      expect.objectContaining({ tailoredExperience: null }),
     );
   });
 });

@@ -166,11 +166,13 @@ describe("updateSettingsSchema", () => {
       updateSettingsSchema.parse({
         ghostwriterSystemPromptTemplate: prompt,
         tailoringPromptTemplate: prompt,
+        experienceTailoringPromptTemplate: prompt,
         scoringPromptTemplate: prompt,
       }),
     ).toEqual({
       ghostwriterSystemPromptTemplate: prompt,
       tailoringPromptTemplate: prompt,
+      experienceTailoringPromptTemplate: prompt,
       scoringPromptTemplate: prompt,
     });
   });
@@ -195,7 +197,7 @@ describe("updateSettingsSchema", () => {
 
   it("rejects prompt template overrides above 12000 characters", () => {
     const result = updateSettingsSchema.safeParse({
-      ghostwriterSystemPromptTemplate: "A".repeat(12001),
+      experienceTailoringPromptTemplate: "A".repeat(12001),
     });
 
     expect(result.success).toBe(false);
@@ -204,7 +206,7 @@ describe("updateSettingsSchema", () => {
     }
 
     expect(
-      result.error.flatten().fieldErrors.ghostwriterSystemPromptTemplate,
+      result.error.flatten().fieldErrors.experienceTailoringPromptTemplate,
     ).toBeDefined();
   });
 });

@@ -20,6 +20,7 @@ import {
 } from "@client/lib/rxresume-config";
 import { BackupSettingsSection } from "@client/pages/settings/components/BackupSettingsSection";
 import { ChatSettingsSection } from "@client/pages/settings/components/ChatSettingsSection";
+import { CvGenerationSection } from "@client/pages/settings/components/CvGenerationSection";
 import { DangerZoneSection } from "@client/pages/settings/components/DangerZoneSection";
 import { DisplaySettingsSection } from "@client/pages/settings/components/DisplaySettingsSection";
 import { EnvironmentSettingsSection } from "@client/pages/settings/components/EnvironmentSettingsSection";
@@ -78,6 +79,7 @@ const DEFAULT_FORM_VALUES: UpdateSettingsInput = {
   pipelineWebhookUrl: "",
   jobCompleteWebhookUrl: "",
   resumeProjects: null,
+  resumeExperience: { mode: "preserve", maxRoles: 5 },
   pdfRenderer: "rxresume",
   typstTheme: "classic",
   rxresumeBaseResumeId: null,
@@ -109,6 +111,7 @@ const DEFAULT_FORM_VALUES: UpdateSettingsInput = {
   blockedCompanyKeywords: [],
   ghostwriterSystemPromptTemplate: "",
   tailoringPromptTemplate: "",
+  experienceTailoringPromptTemplate: "",
   scoringPromptTemplate: "",
 };
 
@@ -129,6 +132,7 @@ const EMPTY_RXRESUME_VALIDATION_BADGE_STATE: RxResumeValidationBadgeState = {
 type SettingsSectionId =
   | "model"
   | "chat"
+  | "cv-generation"
   | "prompt-templates"
   | "scoring"
   | "reactive-resume"
@@ -193,8 +197,30 @@ const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
         id: "prompt-templates",
         label: "Prompt Templates",
         description:
-          "Base AI instructions for Ghostwriter, tailoring, and scoring.",
-        searchTerms: ["prompt", "templates", "system prompt", "instructions"],
+          "Base AI instructions for Ghostwriter, tailoring, experience, and scoring.",
+        searchTerms: [
+          "prompt",
+          "templates",
+          "system prompt",
+          "instructions",
+          "experience",
+          "bullets",
+          "summarize",
+        ],
+      },
+      {
+        id: "cv-generation",
+        label: "CV Generation",
+        description: "Choose which roles and bullets appear in tailored CVs.",
+        searchTerms: [
+          "resume",
+          "cv",
+          "experience",
+          "roles",
+          "bullets",
+          "history",
+          "tailored",
+        ],
       },
     ],
   },
@@ -218,7 +244,7 @@ const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
       {
         id: "reactive-resume",
         label: "Reactive Resume",
-        description: "Resume sync, templates, and project selection.",
+        description: "Resume sync, PDF rendering, and project selection.",
         searchTerms: ["rxresume", "resume", "projects", "template"],
       },
       {
@@ -312,8 +338,10 @@ const SECTION_FIELD_MAP: Record<
   "prompt-templates": [
     "ghostwriterSystemPromptTemplate",
     "tailoringPromptTemplate",
+    "experienceTailoringPromptTemplate",
     "scoringPromptTemplate",
   ],
+  "cv-generation": ["resumeExperience"],
   scoring: [
     "penalizeMissingSalary",
     "missingSalaryPenalty",
@@ -408,6 +436,7 @@ const NULL_SETTINGS_PAYLOAD: UpdateSettingsInput = {
   pipelineWebhookUrl: null,
   jobCompleteWebhookUrl: null,
   resumeProjects: null,
+  resumeExperience: null,
   pdfRenderer: null,
   typstTheme: null,
   rxresumeBaseResumeId: null,
@@ -440,6 +469,7 @@ const NULL_SETTINGS_PAYLOAD: UpdateSettingsInput = {
   blockedCompanyKeywords: null,
   ghostwriterSystemPromptTemplate: null,
   tailoringPromptTemplate: null,
+  experienceTailoringPromptTemplate: null,
   scoringPromptTemplate: null,
 };
 
@@ -475,6 +505,8 @@ const mapSettingsToForm = (data: AppSettings): UpdateSettingsInput => ({
   pipelineWebhookUrl: data.pipelineWebhookUrl.override ?? "",
   jobCompleteWebhookUrl: data.jobCompleteWebhookUrl.override ?? "",
   resumeProjects: data.resumeProjects.override,
+  resumeExperience:
+    data.resumeExperience.override ?? data.resumeExperience.value,
   pdfRenderer: data.pdfRenderer.override ?? data.pdfRenderer.value,
   typstTheme: data.typstTheme.override ?? data.typstTheme.value,
   rxresumeBaseResumeId: data.rxresumeBaseResumeId,
@@ -509,6 +541,8 @@ const mapSettingsToForm = (data: AppSettings): UpdateSettingsInput => ({
   ghostwriterSystemPromptTemplate:
     data.ghostwriterSystemPromptTemplate.value ?? "",
   tailoringPromptTemplate: data.tailoringPromptTemplate.value ?? "",
+  experienceTailoringPromptTemplate:
+    data.experienceTailoringPromptTemplate.value ?? "",
   scoringPromptTemplate: data.scoringPromptTemplate.value ?? "",
 });
 
@@ -643,6 +677,16 @@ const getDerivedSettings = (settings: AppSettings | null) => {
         effective: settings?.typstTheme?.value ?? "classic",
         default: settings?.typstTheme?.default ?? "classic",
       },
+      resumeExperience: {
+        effective: settings?.resumeExperience?.value ?? {
+          mode: "preserve",
+          maxRoles: 5,
+        },
+        default: settings?.resumeExperience?.default ?? {
+          mode: "preserve",
+          maxRoles: 5,
+        },
+      },
     },
     display: {
       showSponsorInfo: {
@@ -752,6 +796,10 @@ const getDerivedSettings = (settings: AppSettings | null) => {
       tailoringPromptTemplate: {
         effective: settings?.tailoringPromptTemplate?.value ?? "",
         default: settings?.tailoringPromptTemplate?.default ?? "",
+      },
+      experienceTailoringPromptTemplate: {
+        effective: settings?.experienceTailoringPromptTemplate?.value ?? "",
+        default: settings?.experienceTailoringPromptTemplate?.default ?? "",
       },
       scoringPromptTemplate: {
         effective: settings?.scoringPromptTemplate?.value ?? "",
@@ -1176,6 +1224,13 @@ export const SettingsPage: React.FC = () => {
         pipelineWebhookUrl: normalizeString(data.pipelineWebhookUrl),
         jobCompleteWebhookUrl: normalizeString(data.jobCompleteWebhookUrl),
         resumeProjects: resumeProjectsOverride,
+        resumeExperience:
+          data.resumeExperience?.mode ===
+            reactiveResume.resumeExperience.default.mode &&
+          data.resumeExperience?.maxRoles ===
+            reactiveResume.resumeExperience.default.maxRoles
+            ? null
+            : data.resumeExperience,
         pdfRenderer: nullIfSame(
           data.pdfRenderer,
           reactiveResume.pdfRenderer.default,
@@ -1254,6 +1309,10 @@ export const SettingsPage: React.FC = () => {
         tailoringPromptTemplate: nullIfSame(
           normalizeString(data.tailoringPromptTemplate),
           promptTemplates.tailoringPromptTemplate.default,
+        ),
+        experienceTailoringPromptTemplate: nullIfSame(
+          normalizeString(data.experienceTailoringPromptTemplate),
+          promptTemplates.experienceTailoringPromptTemplate.default,
         ),
         scoringPromptTemplate: nullIfSame(
           normalizeString(data.scoringPromptTemplate),
@@ -1517,6 +1576,8 @@ export const SettingsPage: React.FC = () => {
           promptTemplates.ghostwriterSystemPromptTemplate.default ||
           promptTemplates.tailoringPromptTemplate.effective !==
             promptTemplates.tailoringPromptTemplate.default ||
+          promptTemplates.experienceTailoringPromptTemplate.effective !==
+            promptTemplates.experienceTailoringPromptTemplate.default ||
           promptTemplates.scoringPromptTemplate.effective !==
             promptTemplates.scoringPromptTemplate.default
           ? { label: "Customized", variant: "outline" as const }
@@ -1578,6 +1639,15 @@ export const SettingsPage: React.FC = () => {
       activeSectionContent = (
         <ChatSettingsSection
           values={chat}
+          isLoading={isLoading}
+          isSaving={isSaving}
+          layoutMode="panel"
+        />
+      );
+      break;
+    case "cv-generation":
+      activeSectionContent = (
+        <CvGenerationSection
           isLoading={isLoading}
           isSaving={isSaving}
           layoutMode="panel"

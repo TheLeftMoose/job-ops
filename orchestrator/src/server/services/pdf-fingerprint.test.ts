@@ -69,6 +69,32 @@ describe("PDF freshness", () => {
     ).toBe("stale");
   });
 
+  it("includes tailored experience changes", () => {
+    const job = createJob({
+      tailoredExperience: JSON.stringify([
+        {
+          experienceId: "e1",
+          roleId: null,
+          company: "Acme",
+          position: "Engineer",
+          period: "2024",
+          bullets: ["One", "Two", "Three"],
+        },
+      ]),
+    });
+
+    expect(createJobPdfFingerprint(job, context)).not.toBe(
+      createJobPdfFingerprint(
+        {
+          ...job,
+          tailoredExperience:
+            job.tailoredExperience?.replace("Three", "Four") ?? null,
+        },
+        context,
+      ),
+    );
+  });
+
   it("ignores Typst theme changes for non-Typst renderers", () => {
     const job = createJob({
       pdfPath: "data/pdfs/generated.pdf",

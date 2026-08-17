@@ -1,7 +1,9 @@
 import { TokenizedInput } from "@client/pages/orchestrator/TokenizedInput";
 import type {
+  ResumeExperienceSettings,
   ResumeProjectCatalogItem,
   ResumeProjectsSettings,
+  TailoredExperienceEntry,
 } from "@shared/types.js";
 import {
   CheckCircle2,
@@ -43,19 +45,22 @@ interface TailoringSectionsProps {
   headline: string;
   jobDescription: string;
   skillsDraft: EditableSkillGroup[];
+  experienceDraft: TailoredExperienceEntry[];
   selectedIds: Set<string>;
   resumeProjectsSettings?: ResumeProjectsSettings | null;
+  resumeExperienceSettings?: ResumeExperienceSettings | null;
   isResumeProjectsSettingsLoading?: boolean;
   tracerLinksEnabled: boolean;
   tracerEnableBlocked: boolean;
   tracerEnableBlockedReason: string | null;
   tracerReadinessChecking?: boolean;
-  generatingSection: "summary" | "headline" | "skills" | null;
+  generatingSection: "summary" | "headline" | "skills" | "experience" | null;
   openSkillGroupId: string;
   disableInputs: boolean;
   onGenerateSummary: () => void;
   onGenerateHeadline: () => void;
   onGenerateSkills: () => void;
+  onGenerateExperience: () => void;
   onSummaryChange: (value: string) => void;
   onHeadlineChange: (value: string) => void;
   onUndoSummary: () => void;
@@ -80,6 +85,12 @@ interface TailoringSectionsProps {
     value: string,
   ) => void;
   onRemoveSkillGroup: (id: string) => void;
+  onUpdateExperienceBullet: (
+    entryIndex: number,
+    bulletIndex: number,
+    value: string,
+  ) => void;
+  onRemoveExperienceRole: (entryIndex: number) => void;
   onToggleProject: (id: string) => void;
   onTracerLinksEnabledChange: (value: boolean) => void;
 }
@@ -332,8 +343,10 @@ export const TailoringSections: React.FC<TailoringSectionsProps> = ({
   headline,
   jobDescription,
   skillsDraft,
+  experienceDraft,
   selectedIds,
   resumeProjectsSettings,
+  resumeExperienceSettings,
   isResumeProjectsSettingsLoading = false,
   tracerLinksEnabled,
   tracerEnableBlocked,
@@ -345,6 +358,7 @@ export const TailoringSections: React.FC<TailoringSectionsProps> = ({
   onGenerateSummary,
   onGenerateHeadline,
   onGenerateSkills,
+  onGenerateExperience,
   onSummaryChange,
   onHeadlineChange,
   onUndoSummary,
@@ -365,6 +379,8 @@ export const TailoringSections: React.FC<TailoringSectionsProps> = ({
   onAddSkillGroup,
   onUpdateSkillGroup,
   onRemoveSkillGroup,
+  onUpdateExperienceBullet,
+  onRemoveExperienceRole,
   onToggleProject,
   onTracerLinksEnabledChange,
 }) => {
@@ -388,6 +404,17 @@ export const TailoringSections: React.FC<TailoringSectionsProps> = ({
       : skillsDraft.some(skillGroupNeedsReview)
         ? "review"
         : "ready";
+  const experienceMode = resumeExperienceSettings?.mode ?? "preserve";
+  const experienceState: SectionState =
+    experienceMode === "preserve"
+      ? "source"
+      : experienceDraft.length === 0
+        ? "missing"
+        : experienceDraft.some((entry) =>
+              entry.bullets.some((bullet) => !textHasValue(bullet)),
+            )
+          ? "review"
+          : "ready";
   const projectsState: SectionState = selectedIds.size > 0 ? "ready" : "none";
   const noSelectedProjectsInfo = getNoSelectedProjectsInfo({
     catalog,
@@ -792,6 +819,114 @@ export const TailoringSections: React.FC<TailoringSectionsProps> = ({
                 </AccordionItem>
               ))}
             </Accordion>
+          )}
+        </AccordionContent>
+      </AccordionItem>
+
+      <AccordionItem value="experience" className={sectionClass}>
+        <AccordionTrigger
+          className={triggerClass}
+          aria-label="Tailored Experience"
+        >
+          <SectionTriggerLabel
+            title="Experience"
+            state={experienceState}
+            count={
+              experienceDraft.length > 0 ? experienceDraft.length : undefined
+            }
+          />
+        </AccordionTrigger>
+        <AccordionContent className="px-3 pb-3 pt-3">
+          {experienceMode === "preserve" ? (
+            <div className="rounded-md border border-border/55 bg-background/40 px-3 py-3 text-xs leading-5 text-muted-foreground">
+              This job uses every visible role and the original descriptions
+              from your base resume. Enable tailored experience in Settings to
+              select a shorter, job-specific history.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className={actionButtonClass}
+                  onClick={onGenerateExperience}
+                  disabled={disableInputs}
+                  aria-label="Generate experience"
+                >
+                  <Sparkles className="mr-1 h-3.5 w-3.5" />
+                  {generatingSection === "experience"
+                    ? "Generating..."
+                    : "Generate"}
+                </Button>
+              </div>
+
+              {experienceDraft.length === 0 ? (
+                <div className="rounded-md border border-dashed border-border/60 bg-background/40 px-3 py-4 text-center text-[11px] text-muted-foreground">
+                  No tailored roles yet. Generate experience to select up to{" "}
+                  {resumeExperienceSettings?.maxRoles ?? 5} relevant roles.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {experienceDraft.map((entry, entryIndex) => (
+                    <div
+                      key={`${entry.experienceId}:${entry.roleId ?? "main"}`}
+                      className="space-y-3 rounded-md border border-border/55 bg-background/45 p-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">
+                            {entry.position}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {[entry.company, entry.period]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                          onClick={() => onRemoveExperienceRole(entryIndex)}
+                          disabled={disableInputs}
+                        >
+                          <Trash2 className="mr-1 h-3.5 w-3.5" />
+                          Remove
+                        </Button>
+                      </div>
+                      <div className="space-y-2">
+                        {entry.bullets.map((bullet, bulletIndex) => (
+                          <div
+                            key={`${entry.experienceId}-${bulletIndex}`}
+                            className="grid grid-cols-[auto_1fr] items-start gap-2"
+                          >
+                            <span className="pt-2 text-xs text-muted-foreground">
+                              •
+                            </span>
+                            <textarea
+                              className={`${inputClass} min-h-20 resize-y`}
+                              value={bullet}
+                              onChange={(event) =>
+                                onUpdateExperienceBullet(
+                                  entryIndex,
+                                  bulletIndex,
+                                  event.target.value,
+                                )
+                              }
+                              aria-label={`${entry.position} bullet ${bulletIndex + 1}`}
+                              disabled={disableInputs}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </AccordionContent>
       </AccordionItem>

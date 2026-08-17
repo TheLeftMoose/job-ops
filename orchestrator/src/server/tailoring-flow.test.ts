@@ -57,6 +57,16 @@ describe("Tailoring Flow", () => {
         "This is a manually edited summary specifically for this job.",
       tailoredHeadline: "Manually Edited Headline",
       tailoredSkills: JSON.stringify(["React", "TypeScript", "Vitest"]),
+      tailoredExperience: JSON.stringify([
+        {
+          experienceId: "experience-1",
+          roleId: null,
+          company: "Acme",
+          position: "Engineer",
+          period: "2024",
+          bullets: ["Built APIs", "Led delivery", "Improved reliability"],
+        },
+      ]),
       selectedProjectIds: "project-a,project-c", // User selected specific projects
     };
 
@@ -85,6 +95,12 @@ describe("Tailoring Flow", () => {
         summary: "This is a manually edited summary specifically for this job.",
         headline: "Manually Edited Headline",
         skills: ["React", "TypeScript", "Vitest"],
+        experience: [
+          expect.objectContaining({
+            experienceId: "experience-1",
+            bullets: ["Built APIs", "Led delivery", "Improved reliability"],
+          }),
+        ],
       }),
       "Senior TypeScript Developer", // Original JD
       undefined, // Deprecated profile path
@@ -137,6 +153,7 @@ describe("Tailoring Flow", () => {
         summary: "", // Empty if not tailored
         headline: "",
         skills: [],
+        experience: null,
       }),
       "Junior Java Developer",
       undefined, // Deprecated profile path

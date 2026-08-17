@@ -3,6 +3,7 @@ import { getRequestContext } from "@infra/request-context";
 import { getActiveTenantId } from "@server/tenancy/context";
 import { getPrivateDataScope } from "@server/tenancy/private-scope";
 import type { ResumeProfile } from "@shared/types";
+import type { DesignResumeJson } from "@shared/types/design-resume";
 import {
   designResumeToProfile,
   isLegacyDesignResumeError,
@@ -124,7 +125,12 @@ export async function getProfile(forceRefresh = false): Promise<ResumeProfile> {
       throw new Error("Resume data is empty or invalid");
     }
 
-    cache.profile = resume.data as unknown as ResumeProfile;
+    cache.profile = await designResumeToProfile(
+      resume.data as unknown as DesignResumeJson,
+    );
+    if (!cache.profile) {
+      throw new Error("Resume data could not be normalized");
+    }
     cache.resumeId = rxresumeBaseResumeId;
     logger.info("Profile loaded from Reactive Resume", {
       resumeId: rxresumeBaseResumeId,

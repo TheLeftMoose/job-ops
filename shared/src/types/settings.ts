@@ -24,6 +24,22 @@ export interface ResumeProjectsSettings {
   aiSelectableProjectIds: string[];
 }
 
+export const RESUME_EXPERIENCE_MODE_VALUES = ["preserve", "tailored"] as const;
+export type ResumeExperienceMode =
+  (typeof RESUME_EXPERIENCE_MODE_VALUES)[number];
+export const RESUME_EXPERIENCE_MODE_LABELS: Record<
+  ResumeExperienceMode,
+  string
+> = {
+  preserve: "Keep all base experience",
+  tailored: "Tailor roles and bullets for each job",
+};
+
+export interface ResumeExperienceSettings {
+  mode: ResumeExperienceMode;
+  maxRoles: number;
+}
+
 export const LLM_PROVIDER_VALUES = [
   "openrouter",
   "requesty",
@@ -169,6 +185,12 @@ export interface ResumeProfile {
         date: string;
         summary: string;
         visible: boolean;
+        roles?: Array<{
+          id: string;
+          position: string;
+          date: string;
+          summary: string;
+        }>;
       }>;
     };
     [key: string]: unknown;
@@ -246,6 +268,7 @@ export interface AppSettings {
   pipelineWebhookUrl: Resolved<string>;
   jobCompleteWebhookUrl: Resolved<string>;
   resumeProjects: Resolved<ResumeProjectsSettings>;
+  resumeExperience: Resolved<ResumeExperienceSettings>;
   pdfRenderer: Resolved<PdfRenderer>;
   typstTheme: Resolved<TypstTheme>;
   ukvisajobsMaxJobs: Resolved<number>;
@@ -266,6 +289,7 @@ export interface AppSettings {
   ghostwriterSystemPromptTemplate: Resolved<string>;
   ghostwriterStopSlopEnabled: Resolved<boolean>;
   tailoringPromptTemplate: Resolved<string>;
+  experienceTailoringPromptTemplate: Resolved<string>;
   scoringPromptTemplate: Resolved<string>;
   searchCities: Resolved<string>;
   locationSearchMode: Resolved<LocationInputMode>;

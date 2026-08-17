@@ -153,6 +153,9 @@ describe("getProfile", () => {
       id: "test-resume-id",
       data: mockResumeData,
     } as any);
+    vi.mocked(designResumeToProfile)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue(mockResumeData as any);
 
     const profile = await getProfile();
 
@@ -164,7 +167,9 @@ describe("getProfile", () => {
   it("should fall back to Reactive Resume when the local Resume Studio document is legacy", async () => {
     const mockResumeData = { basics: { name: "Fallback User" } };
     const legacyError = new Error("legacy design resume");
-    vi.mocked(designResumeToProfile).mockRejectedValue(legacyError);
+    vi.mocked(designResumeToProfile)
+      .mockRejectedValueOnce(legacyError)
+      .mockResolvedValue(mockResumeData as any);
     vi.mocked(isLegacyDesignResumeError).mockReturnValue(true);
     vi.mocked(getConfiguredRxResumeBaseResumeId).mockResolvedValue({
       mode: "v5",
@@ -189,11 +194,15 @@ describe("getProfile", () => {
       id: "test-resume-id",
       data: mockResumeData,
     } as any);
+    vi.mocked(designResumeToProfile)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(mockResumeData as any)
+      .mockResolvedValue(null);
 
     await getProfile();
     await getProfile();
 
-    expect(designResumeToProfile).toHaveBeenCalledTimes(2);
+    expect(designResumeToProfile).toHaveBeenCalledTimes(3);
     expect(getConfiguredRxResumeBaseResumeId).toHaveBeenCalledTimes(2);
     // But getResume should only be called once due to caching
     expect(getResume).toHaveBeenCalledTimes(1);
@@ -209,6 +218,11 @@ describe("getProfile", () => {
       id: "test-resume-id",
       data: mockResumeData,
     } as any);
+    vi.mocked(designResumeToProfile)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(mockResumeData as any)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue(mockResumeData as any);
 
     await getProfile();
     await getProfile(true);

@@ -240,6 +240,8 @@ FROM runtime-node-deps AS production
 # Copy production-only runtime assets from sibling stages.
 COPY --from=tectonic /usr/local/bin/tectonic /usr/local/bin/tectonic
 COPY --from=typst /usr/local/bin/typst /usr/local/bin/typst
+ENV TYPST_BIN=/usr/local/bin/typst
+RUN "$TYPST_BIN" --version
 COPY --from=python-deps /usr/local/lib/python3.11/dist-packages /usr/local/lib/python3.11/dist-packages
 COPY --from=python-deps /ms-playwright /ms-playwright
 COPY --from=camoufox-cache /root/.cache/camoufox /root/.cache/camoufox

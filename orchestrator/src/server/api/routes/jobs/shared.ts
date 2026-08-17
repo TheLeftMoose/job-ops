@@ -18,6 +18,7 @@ import {
   type PdfFingerprintContext,
   resolvePdfFingerprintContext,
 } from "@server/services/pdf-fingerprint";
+import { tailoredExperienceSchema } from "@shared/tailored-experience.js";
 import {
   APPLICATION_OUTCOMES,
   APPLICATION_STAGES,
@@ -166,6 +167,29 @@ export const updateJobSchema = z.object({
           code: z.ZodIssueCode.custom,
           message:
             "tailoredSkills must be a JSON array of { name, keywords } objects",
+        });
+      }
+    }),
+  tailoredExperience: z
+    .string()
+    .nullable()
+    .optional()
+    .superRefine((value, ctx) => {
+      if (value === undefined || value === null || value.trim().length === 0) {
+        return;
+      }
+      try {
+        const result = tailoredExperienceSchema.safeParse(JSON.parse(value));
+        if (!result.success) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "tailoredExperience must contain valid roles and bullets",
+          });
+        }
+      } catch {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "tailoredExperience must contain valid JSON",
         });
       }
     }),

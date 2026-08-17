@@ -14,7 +14,7 @@ import type {
 
 type ProcessOptions = {
   force?: boolean;
-  fields?: Array<"summary" | "headline" | "skills">;
+  fields?: Array<"summary" | "headline" | "skills" | "experience">;
 };
 
 function scoreFromJob(job: Job): number {
@@ -130,6 +130,9 @@ export async function simulateSummarizeJob(
       : {}),
     ...(updateAll || requestedFields.includes("skills")
       ? { tailoredSkills: makeDemoTailoredSkills() }
+      : {}),
+    ...(updateAll || requestedFields.includes("experience")
+      ? { tailoredExperience: "[]" }
       : {}),
     ...(updateAll ? { selectedProjectIds: ensureProjectIds(job) } : {}),
   });

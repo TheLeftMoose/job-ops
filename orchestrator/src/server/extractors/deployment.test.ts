@@ -83,6 +83,18 @@ describe("extractor deployment config", () => {
     expect(fetchScript).toContain("await downloadMMDB();");
   });
 
+  it("ships and verifies Typst in Docker runtime images", async () => {
+    const dockerfile = await readFile(resolve(process.cwd(), "../Dockerfile"), {
+      encoding: "utf8",
+    });
+
+    expect(dockerfile).toContain(
+      "COPY --from=typst /usr/local/bin/typst /usr/local/bin/typst",
+    );
+    expect(dockerfile).toContain("ENV TYPST_BIN=/usr/local/bin/typst");
+    expect(dockerfile).toContain('RUN "$TYPST_BIN" --version');
+  });
+
   it("syncs the Naukri extractor in compose development mode", async () => {
     const composeFile = await readFile(
       resolve(process.cwd(), "../docker-compose.yml"),

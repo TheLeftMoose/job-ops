@@ -103,4 +103,84 @@ describe.sequential("Jobs tailoring PATCH route", () => {
     expect(body.ok).toBe(false);
     expect(body.error?.message || "").toContain("JSON array");
   });
+
+  it("accepts valid tailored experience and allows clearing it", async () => {
+    const jobId = await createManualJobId();
+    const experience = JSON.stringify([
+      {
+        experienceId: "experience-1",
+        roleId: null,
+        company: "Acme",
+        position: "Engineer",
+        period: "2024",
+        bullets: ["Built APIs", "Led delivery", "Improved reliability"],
+      },
+    ]);
+
+    const updateResponse = await fetch(`${baseUrl}/api/jobs/${jobId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Connection: "close",
+      },
+      body: JSON.stringify({ tailoredExperience: experience }),
+    });
+    expect(updateResponse.status).toBe(200);
+    expect(
+      (
+        (await updateResponse.json()) as {
+          data?: { tailoredExperience: string };
+        }
+      ).data?.tailoredExperience,
+    ).toBe(experience);
+
+    const clearResponse = await fetch(`${baseUrl}/api/jobs/${jobId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Connection: "close",
+      },
+      body: JSON.stringify({ tailoredExperience: null }),
+    });
+    expect(clearResponse.status).toBe(200);
+    expect(
+      (
+        (await clearResponse.json()) as {
+          data?: { tailoredExperience: string | null };
+        }
+      ).data?.tailoredExperience,
+    ).toBeNull();
+  });
+
+  it("rejects tailored experience with fewer than three bullets", async () => {
+    const jobId = await createManualJobId();
+
+    const response = await fetch(`${baseUrl}/api/jobs/${jobId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Connection: "close",
+      },
+      body: JSON.stringify({
+        tailoredExperience: JSON.stringify([
+          {
+            experienceId: "experience-1",
+            roleId: null,
+            company: "Acme",
+            position: "Engineer",
+            period: "2024",
+            bullets: ["Built APIs", "Led delivery"],
+          },
+        ]),
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as {
+      error?: { message?: string } | string;
+    };
+    expect(
+      typeof body.error === "string" ? body.error : body.error?.message,
+    ).toContain("valid roles and bullets");
+  });
 });

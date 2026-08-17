@@ -102,6 +102,9 @@ describe("settingsRegistry helpers", () => {
       expect(settingsRegistry.tailoringPromptTemplate.default()).toBe(
         getDefaultPromptTemplate("tailoringPromptTemplate"),
       );
+      expect(settingsRegistry.experienceTailoringPromptTemplate.default()).toBe(
+        getDefaultPromptTemplate("experienceTailoringPromptTemplate"),
+      );
       expect(settingsRegistry.scoringPromptTemplate.default()).toBe(
         getDefaultPromptTemplate("scoringPromptTemplate"),
       );
@@ -204,6 +207,33 @@ describe("settingsRegistry helpers", () => {
       expect(settingsRegistry.searchTerms.parse('["dev", "engineer"]')).toEqual(
         ["dev", "engineer"],
       );
+    });
+
+    describe("resume experience settings", () => {
+      it("preserves all experience by default", () => {
+        expect(settingsRegistry.resumeExperience.default()).toEqual({
+          mode: "preserve",
+          maxRoles: 5,
+        });
+      });
+
+      it("parses only valid experience settings", () => {
+        expect(
+          settingsRegistry.resumeExperience.parse(
+            '{"mode":"tailored","maxRoles":4}',
+          ),
+        ).toEqual({ mode: "tailored", maxRoles: 4 });
+        expect(
+          settingsRegistry.resumeExperience.parse(
+            '{"mode":"tailored","maxRoles":0}',
+          ),
+        ).toBeNull();
+        expect(
+          settingsRegistry.resumeExperience.parse(
+            '{"mode":"unknown","maxRoles":4}',
+          ),
+        ).toBeNull();
+      });
     });
 
     it("returns null for invalid JSON or non-arrays", () => {

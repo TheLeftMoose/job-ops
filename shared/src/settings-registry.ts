@@ -17,6 +17,8 @@ import {
   type LlmPurposeOverrides,
   PDF_RENDERER_VALUES,
   type PdfRenderer,
+  RESUME_EXPERIENCE_MODE_VALUES,
+  type ResumeExperienceSettings,
   type ResumeProjectsSettings,
   TYPST_THEME_VALUES,
   type TypstTheme,
@@ -320,6 +322,11 @@ export const resumeProjectsSchema = z.object({
   aiSelectableProjectIds: z.array(z.string().trim().min(1)).max(200),
 });
 
+export const resumeExperienceSchema = z.object({
+  mode: z.enum(RESUME_EXPERIENCE_MODE_VALUES),
+  maxRoles: z.number().int().min(1).max(20),
+});
+
 export const settingsRegistry = {
   // --- Typed Settings ---
   model: {
@@ -420,6 +427,22 @@ export const settingsRegistry = {
     ): string | null => {
       return value ? JSON.stringify(value) : null;
     },
+  },
+  resumeExperience: {
+    kind: "typed" as const,
+    schema: resumeExperienceSchema,
+    default: (): ResumeExperienceSettings => ({
+      mode: "preserve",
+      maxRoles: 5,
+    }),
+    parse: (raw: string | undefined): ResumeExperienceSettings | null => {
+      const parsed = parseJsonObjectOrNull<unknown>(raw);
+      const result = resumeExperienceSchema.safeParse(parsed);
+      return result.success ? result.data : null;
+    },
+    serialize: (
+      value: ResumeExperienceSettings | null | undefined,
+    ): string | null => (value ? JSON.stringify(value) : null),
   },
   pdfRenderer: {
     kind: "typed" as const,
@@ -605,6 +628,15 @@ export const settingsRegistry = {
     kind: "typed" as const,
     schema: z.string().trim().max(12000),
     default: (): string => getDefaultPromptTemplate("tailoringPromptTemplate"),
+    parse: parseNonEmptyStringOrNull,
+    serialize: (value: string | null | undefined): string | null =>
+      value ?? null,
+  },
+  experienceTailoringPromptTemplate: {
+    kind: "typed" as const,
+    schema: z.string().trim().max(12000),
+    default: (): string =>
+      getDefaultPromptTemplate("experienceTailoringPromptTemplate"),
     parse: parseNonEmptyStringOrNull,
     serialize: (value: string | null | undefined): string | null =>
       value ?? null,

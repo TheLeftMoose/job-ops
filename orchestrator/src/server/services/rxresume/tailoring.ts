@@ -1,5 +1,8 @@
 import { createId } from "@paralleldrive/cuid2";
-import type { ResumeProjectCatalogItem } from "@shared/types";
+import type {
+  ResumeProjectCatalogItem,
+  TailoredExperienceEntry,
+} from "@shared/types";
 import { stripHtmlTags } from "@shared/utils/string";
 
 type RecordLike = Record<string, unknown>;
@@ -14,6 +17,7 @@ export type TailorChunkInput = {
   headline?: string | null;
   summary?: string | null;
   skills?: TailoredSkillsInput;
+  experience?: TailoredExperienceEntry[] | null;
 };
 
 export type ResumeProjectSelectionItem = ResumeProjectCatalogItem & {
@@ -32,6 +36,28 @@ function asRecord(value: unknown): RecordLike | null {
 
 function asArray(value: unknown): unknown[] | null {
   return Array.isArray(value) ? value : null;
+}
+
+function experienceKey(experienceId: string, roleId: string | null): string {
+  return `${experienceId}\u0000${roleId ?? ""}`;
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(
+    /[&<>"']/g,
+    (character) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      })[character] ?? character,
+  );
+}
+
+function bulletsToHtml(bullets: string[]): string {
+  return `<ul>${bullets.map((bullet) => `<li>${escapeHtml(bullet)}</li>`).join("")}</ul>`;
 }
 
 function parseTailoredSkills(
@@ -121,6 +147,7 @@ export function applyTailoredSkills(
         (typeof match.id === "string" ? match.id : "") ||
         createId();
     }
+
     if ("name" in next) {
       next.name =
         (typeof newSkill.name === "string" ? newSkill.name : "") ||
@@ -171,6 +198,84 @@ export function applyTailoredSkills(
 
     return next;
   });
+}
+
+export function applyTailoredExperience(
+  resumeData: RecordLike,
+  tailoredExperience?: TailoredExperienceEntry[] | null,
+): void {
+  if (tailoredExperience === undefined || tailoredExperience === null) return;
+
+  const sections = asRecord(resumeData.sections);
+  const experienceSection = asRecord(sections?.experience);
+  const items = asArray(experienceSection?.items);
+  if (!experienceSection || !items) {
+    if (tailoredExperience.length > 0) {
+      throw new Error(
+        "Tailored experience cannot be applied because the base resume has no experience section",
+      );
+    }
+    return;
+  }
+
+  const selectedByKey = new Map(
+    tailoredExperience.map((entry) => [
+      experienceKey(entry.experienceId, entry.roleId),
+      entry,
+    ]),
+  );
+  const matchedKeys = new Set<string>();
+  const nextItems: RecordLike[] = [];
+
+  for (const rawItem of items) {
+    const item = asRecord(rawItem);
+    if (!item || typeof item.id !== "string") continue;
+    const roles = asArray(item.roles) ?? [];
+
+    if (roles.length > 0) {
+      for (const rawRole of roles) {
+        const role = asRecord(rawRole);
+        if (!role || typeof role.id !== "string") continue;
+        const key = experienceKey(item.id, role.id);
+        const selected = selectedByKey.get(key);
+        if (!selected) continue;
+        matchedKeys.add(key);
+        nextItems.push({
+          ...item,
+          id: `${item.id}:${role.id}`,
+          hidden: false,
+          position: role.position,
+          period: role.period,
+          description: bulletsToHtml(selected.bullets),
+          roles: [],
+        });
+      }
+      continue;
+    }
+
+    const key = experienceKey(item.id, null);
+    const selected = selectedByKey.get(key);
+    if (!selected) continue;
+    matchedKeys.add(key);
+    nextItems.push({
+      ...item,
+      hidden: false,
+      description: bulletsToHtml(selected.bullets),
+      roles: [],
+    });
+  }
+
+  const missing = [...selectedByKey.keys()].filter(
+    (key) => !matchedKeys.has(key),
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      "Tailored experience references roles that no longer exist in the base resume. Regenerate experience tailoring.",
+    );
+  }
+
+  experienceSection.items = nextItems;
+  experienceSection.hidden = nextItems.length === 0;
 }
 
 export function extractProjectsFromResume(resumeData: RecordLike): {
@@ -253,6 +358,7 @@ export function applyTailoredChunks(args: {
   resumeData: RecordLike;
   tailoredContent: TailorChunkInput;
 }): void {
+  applyTailoredExperience(args.resumeData, args.tailoredContent.experience);
   applyTailoredSkills(args.resumeData, args.tailoredContent.skills);
   applyTailoredSummary(args.resumeData, args.tailoredContent.summary);
   applyTailoredHeadline(args.resumeData, args.tailoredContent.headline);

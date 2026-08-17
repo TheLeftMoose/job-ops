@@ -1,7 +1,11 @@
 import { z } from "zod";
-import { resumeProjectsSchema, settingsRegistry } from "./settings-registry";
+import {
+  resumeExperienceSchema,
+  resumeProjectsSchema,
+  settingsRegistry,
+} from "./settings-registry";
 
-export { resumeProjectsSchema };
+export { resumeExperienceSchema, resumeProjectsSchema };
 
 type RegistryKeys = keyof typeof settingsRegistry;
 

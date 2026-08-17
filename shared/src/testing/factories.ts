@@ -37,6 +37,7 @@ export const createJob = (overrides: Partial<Job> = {}): Job => ({
   tailoredSummary: null,
   tailoredHeadline: null,
   tailoredSkills: null,
+  tailoredExperience: null,
   selectedProjectIds: null,
   pdfPath: null,
   pdfSource: null,
@@ -159,6 +160,11 @@ export const createAppSettings = (
     },
     override: null,
   },
+  resumeExperience: {
+    value: { mode: "preserve", maxRoles: 5 },
+    default: { mode: "preserve", maxRoles: 5 },
+    override: null,
+  },
   pdfRenderer: {
     value: "rxresume",
     default: "rxresume",
@@ -230,6 +236,11 @@ export const createAppSettings = (
   tailoringPromptTemplate: {
     value: getDefaultPromptTemplate("tailoringPromptTemplate"),
     default: getDefaultPromptTemplate("tailoringPromptTemplate"),
+    override: null,
+  },
+  experienceTailoringPromptTemplate: {
+    value: getDefaultPromptTemplate("experienceTailoringPromptTemplate"),
+    default: getDefaultPromptTemplate("experienceTailoringPromptTemplate"),
     override: null,
   },
   scoringPromptTemplate: {

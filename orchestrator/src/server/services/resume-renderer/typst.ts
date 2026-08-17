@@ -643,7 +643,7 @@ async function runTypst(args: {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         reject(
           new Error(
-            "Typst binary not found. Install typst or set TYPST_BIN to the executable path.",
+            "Typst binary not found on this host. The standard JobOps Docker image includes Typst; for native runs, install Typst and ensure it is on PATH or set TYPST_BIN to the executable path.",
           ),
         );
         return;

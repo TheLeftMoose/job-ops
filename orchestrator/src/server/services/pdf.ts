@@ -11,7 +11,11 @@ import { getSetting } from "@server/repositories/settings";
 import { getJobOpsPublicAvailability } from "@server/services/tracer-links";
 import { safePdfFileName } from "@shared/filename-sanitizer";
 import { settingsRegistry } from "@shared/settings-registry";
-import type { DesignResumePdfResponse, PdfRenderer } from "@shared/types";
+import type {
+  DesignResumePdfResponse,
+  PdfRenderer,
+  TailoredExperienceEntry,
+} from "@shared/types";
 import { getCurrentDesignResume } from "./design-resume";
 import { resolveWritingOutputLanguageForResumeJson } from "./output-language";
 import {
@@ -48,6 +52,7 @@ export interface TailoredPdfContent {
   summary?: string | null;
   headline?: string | null;
   skills?: Array<{ name: string; keywords: string[] }> | null;
+  experience?: TailoredExperienceEntry[] | null;
 }
 
 export interface GeneratePdfOptions {
