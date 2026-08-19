@@ -10,6 +10,7 @@ import {
   MoreHorizontal,
   PlusCircle,
   RefreshCcw,
+  RotateCcw,
   Sparkles,
   Upload,
   XCircle,
@@ -33,6 +34,7 @@ type JobPageRightSidebarProps = {
   jobLink: string | null;
   isDiscovered: boolean;
   isReady: boolean;
+  isSkipped: boolean;
   isApplied: boolean;
   isInProgress: boolean;
   canLogEvents: boolean;
@@ -52,6 +54,7 @@ type JobPageRightSidebarProps = {
   onUploadPdf: () => void;
   onRegeneratePdf: () => void;
   onSkip: () => void;
+  onRestore: () => void;
   onOpenEditDetails: () => void;
   onViewJobDescription: () => void;
   onCopyJobInfo: () => void;
@@ -65,6 +68,7 @@ export const JobPageRightSidebar: React.FC<JobPageRightSidebarProps> = ({
   jobLink,
   isDiscovered,
   isReady,
+  isSkipped,
   isApplied,
   isInProgress,
   canLogEvents,
@@ -84,6 +88,7 @@ export const JobPageRightSidebar: React.FC<JobPageRightSidebarProps> = ({
   onUploadPdf,
   onRegeneratePdf,
   onSkip,
+  onRestore,
   onOpenEditDetails,
   onViewJobDescription,
   onCopyJobInfo,
@@ -231,6 +236,19 @@ export const JobPageRightSidebar: React.FC<JobPageRightSidebarProps> = ({
           >
             <XCircle className="mr-1.5 h-3.5 w-3.5" />
             Skip Job
+          </Button>
+        )}
+
+        {isSkipped && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-9 w-full justify-start"
+            onClick={onRestore}
+            disabled={isBusy}
+          >
+            <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+            Restore to Discovered
           </Button>
         )}
 

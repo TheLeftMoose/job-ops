@@ -35,6 +35,7 @@ import {
   useGenerateJobPdfMutation,
   useMarkAsAppliedMutation,
   useRescoreJobMutation,
+  useRestoreJobMutation,
   useSkipJobMutation,
   useUpdateJobMutation,
 } from "@/client/hooks/queries/useJobMutations";
@@ -196,6 +197,7 @@ export const JobPage: React.FC = () => {
   const markAsAppliedMutation = useMarkAsAppliedMutation();
   const updateJobMutation = useUpdateJobMutation();
   const skipJobMutation = useSkipJobMutation();
+  const restoreJobMutation = useRestoreJobMutation();
   const rescoreJobMutation = useRescoreJobMutation();
   const generatePdfMutation = useGenerateJobPdfMutation();
   const checkSponsorMutation = useCheckSponsorMutation();
@@ -398,6 +400,14 @@ export const JobPage: React.FC = () => {
     });
   };
 
+  const handleRestore = async () => {
+    await runAction("restore", async () => {
+      if (!job) return;
+      await restoreJobMutation.mutateAsync(job.id);
+      toast.success("Job restored to Discovered");
+    });
+  };
+
   const handleRescore = async () => {
     await runAction("rescore", async () => {
       if (!job) return;
@@ -508,6 +518,7 @@ export const JobPage: React.FC = () => {
   const pdfActionsDisabled = !job?.pdfPath || isRegeneratingPdf;
   const isDiscovered = job?.status === "discovered";
   const isReady = job?.status === "ready";
+  const isSkipped = job?.status === "skipped";
   const isApplied = job?.status === "applied";
   const baseJobPath = id ? `/job/${id}` : "";
   const latestNote = notes[0] ?? null;
@@ -884,6 +895,7 @@ export const JobPage: React.FC = () => {
               jobLink={jobLink}
               isDiscovered={Boolean(isDiscovered)}
               isReady={Boolean(isReady)}
+              isSkipped={Boolean(isSkipped)}
               isApplied={Boolean(isApplied)}
               isInProgress={Boolean(isInProgress)}
               canLogEvents={canLogEvents}
@@ -912,6 +924,7 @@ export const JobPage: React.FC = () => {
               onUploadPdf={() => uploadPdfInputRef.current?.click()}
               onRegeneratePdf={() => void handleRegeneratePdf()}
               onSkip={() => void handleSkip()}
+              onRestore={() => void handleRestore()}
               onOpenEditDetails={openEditDetails}
               onViewJobDescription={handleViewJobDescription}
               onCopyJobInfo={() => void handleCopyJobInfo()}

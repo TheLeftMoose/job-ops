@@ -352,6 +352,23 @@ export async function skipJob(
   return getSingleJobFromActionResult(result, idOrIds);
 }
 
+export async function restoreJob(ids: string[]): Promise<JobActionResponse>;
+export async function restoreJob(id: string): Promise<Job>;
+export async function restoreJob(
+  idOrIds: string | string[],
+): Promise<Job | JobActionResponse> {
+  if (!Array.isArray(idOrIds)) {
+    return updateJob(idOrIds, { status: "discovered" });
+  }
+
+  const jobIds = toJobIdList(idOrIds);
+  const result = await runJobAction({
+    action: "restore",
+    jobIds,
+  });
+  return result;
+}
+
 export async function runJobAction(
   input: JobActionRequest,
 ): Promise<JobActionResponse> {

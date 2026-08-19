@@ -230,6 +230,10 @@ export const jobActionRequestSchema = z.discriminatedUnion("action", [
     jobIds: z.array(z.string().min(1)).min(1).max(500),
   }),
   z.object({
+    action: z.literal("restore"),
+    jobIds: z.array(z.string().min(1)).min(1).max(500),
+  }),
+  z.object({
     action: z.literal("rescore"),
     jobIds: z.array(z.string().min(1)).min(1).max(500),
   }),

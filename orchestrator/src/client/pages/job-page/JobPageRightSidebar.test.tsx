@@ -45,6 +45,7 @@ function renderRightSidebar(overrides: Parameters<typeof createJob>[0] = {}) {
       jobLink={job.jobUrl}
       isDiscovered={job.status === "discovered"}
       isReady={job.status === "ready"}
+      isSkipped={job.status === "skipped"}
       isApplied={job.status === "applied"}
       isInProgress={job.status === "in_progress"}
       canLogEvents={false}
@@ -64,6 +65,7 @@ function renderRightSidebar(overrides: Parameters<typeof createJob>[0] = {}) {
       onUploadPdf={noop}
       onRegeneratePdf={noop}
       onSkip={noop}
+      onRestore={noop}
       onOpenEditDetails={noop}
       onViewJobDescription={noop}
       onCopyJobInfo={noop}
@@ -107,5 +109,14 @@ describe("JobPageRightSidebar actions", () => {
       screen.getAllByRole("button", { name: /upload pdf/i }).length,
     ).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /download pdf/i })).toBeNull();
+  });
+
+  it("offers restore for skipped jobs", () => {
+    renderRightSidebar({ status: "skipped" });
+
+    expect(
+      screen.getByRole("button", { name: /restore to discovered/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /skip job/i })).toBeNull();
   });
 });

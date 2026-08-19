@@ -6,10 +6,12 @@ interface FloatingJobActionsBarProps {
   selectedCount: number;
   canMoveSelected: boolean;
   canSkipSelected: boolean;
+  canRestoreSelected: boolean;
   canRescoreSelected: boolean;
   jobActionInFlight: boolean;
   onMoveToReady: () => void;
   onSkipSelected: () => void;
+  onRestoreSelected: () => void;
   onRescoreSelected: () => void;
   onClear: () => void;
 }
@@ -18,10 +20,12 @@ export const FloatingJobActionsBar: React.FC<FloatingJobActionsBarProps> = ({
   selectedCount,
   canMoveSelected,
   canSkipSelected,
+  canRestoreSelected,
   canRescoreSelected,
   jobActionInFlight,
   onMoveToReady,
   onSkipSelected,
+  onRestoreSelected,
   onRescoreSelected,
   onClear,
 }) => {
@@ -62,6 +66,18 @@ export const FloatingJobActionsBar: React.FC<FloatingJobActionsBarProps> = ({
                   onClick={onSkipSelected}
                 >
                   Skip selected
+                </Button>
+              )}
+              {canRestoreSelected && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="w-full sm:w-auto"
+                  disabled={jobActionInFlight}
+                  onClick={onRestoreSelected}
+                >
+                  Restore selected
                 </Button>
               )}
               {canRescoreSelected && (

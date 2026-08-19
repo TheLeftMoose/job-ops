@@ -13,6 +13,7 @@ import { TooltipWhenDisabled } from "@client/components/TooltipWhenDisabled";
 import { TailoringWorkspace } from "@client/components/tailoring/TailoringWorkspace";
 import {
   useMarkAsAppliedMutation,
+  useRestoreJobMutation,
   useSkipJobMutation,
 } from "@client/hooks/queries/useJobMutations";
 import { useProfile } from "@client/hooks/useProfile";
@@ -48,6 +49,7 @@ import {
   Loader2,
   MoreHorizontal,
   RefreshCcw,
+  RotateCcw,
   Sparkles,
   Star,
   Upload,
@@ -303,6 +305,7 @@ export const JobDetailPanel: React.FC<JobDetailPanelProps> = ({
   const previousSelectionKeyRef = useRef<string | null>(null);
   const markAsAppliedMutation = useMarkAsAppliedMutation();
   const skipJobMutation = useSkipJobMutation();
+  const restoreJobMutation = useRestoreJobMutation();
   const { isRescoring, rescoreJob } = useRescoreJob(onJobUpdated);
   const { settings } = useSettings();
   const { personName, profile } = useProfile();
@@ -516,6 +519,24 @@ export const JobDetailPanel: React.FC<JobDetailPanelProps> = ({
     }
   }, [handleJobMoved, onJobUpdated, selectedJob, skipJobMutation]);
 
+  const handleRestore = useCallback(async () => {
+    if (!selectedJob) return;
+    try {
+      await restoreJobMutation.mutateAsync(selectedJob.id);
+      trackProductEvent("jobs_job_action_completed", {
+        action: "restore",
+        result: "success",
+        from_status: selectedJob.status,
+        to_status: "discovered",
+      });
+      toast.success("Job restored to Discovered");
+      handleJobMoved(selectedJob.id);
+      await onJobUpdated();
+    } catch (error) {
+      showErrorToast(error, "Failed to restore job");
+    }
+  }, [handleJobMoved, onJobUpdated, restoreJobMutation, selectedJob]);
+
   const handleOpenPdf = useCallback(() => {
     if (!selectedJob || !selectedJob.pdfPath || isPdfRegenerating(selectedJob))
       return;
@@ -676,6 +697,7 @@ export const JobDetailPanel: React.FC<JobDetailPanelProps> = ({
     selectedJob.status === "processing";
   const canGenerate = ["discovered", "ready"].includes(selectedJob.status);
   const canSkip = ["discovered", "ready"].includes(selectedJob.status);
+  const canRestore = selectedJob.status === "skipped";
   const isRegeneratingPdf = isPdfRegenerating(selectedJob);
   const isStalePdf = isPdfStale(selectedJob);
   const pdfLabels = getPdfActionLabels(selectedJob);
@@ -828,6 +850,15 @@ export const JobDetailPanel: React.FC<JobDetailPanelProps> = ({
                     >
                       <XCircle className="mr-2 h-4 w-4" />
                       Skip job
+                    </DropdownMenuItem>
+                  </>
+                )}
+                {canRestore && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={() => void handleRestore()}>
+                      <RotateCcw className="mr-2 h-4 w-4" />
+                      Restore job
                     </DropdownMenuItem>
                   </>
                 )}

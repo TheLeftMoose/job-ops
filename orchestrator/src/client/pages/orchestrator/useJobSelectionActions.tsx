@@ -13,6 +13,7 @@ import { JobActionProgressToast } from "./JobActionProgressToast";
 import {
   canMoveToReady,
   canRescore,
+  canRestore,
   canSkip,
   getFailedJobIds,
 } from "./jobActions";
@@ -23,12 +24,14 @@ const MAX_JOB_ACTION_JOB_IDS = 500;
 const jobActionLabel: Record<JobAction, string> = {
   move_to_ready: "Moving jobs to Ready...",
   skip: "Skipping selected jobs...",
+  restore: "Restoring selected jobs...",
   rescore: "Calculating match scores...",
 };
 
 const jobActionSuccessLabel: Record<JobAction, string> = {
   move_to_ready: "jobs moved to Ready",
   skip: "jobs skipped",
+  restore: "jobs restored to Discovered",
   rescore: "matches recalculated",
 };
 
@@ -57,6 +60,10 @@ export function useJobSelectionActions({
   );
 
   const canSkipSelected = useMemo(() => canSkip(selectedJobs), [selectedJobs]);
+  const canRestoreSelected = useMemo(
+    () => canRestore(selectedJobs),
+    [selectedJobs],
+  );
   const canMoveSelected = useMemo(
     () => canMoveToReady(selectedJobs),
     [selectedJobs],
@@ -280,6 +287,7 @@ export function useJobSelectionActions({
   return {
     selectedJobIds,
     canSkipSelected,
+    canRestoreSelected,
     canMoveSelected,
     canRescoreSelected,
     jobActionInFlight,

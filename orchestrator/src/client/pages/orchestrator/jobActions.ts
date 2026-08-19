@@ -8,6 +8,10 @@ export function canSkip(jobs: JobListItem[]): boolean {
   );
 }
 
+export function canRestore(jobs: JobListItem[]): boolean {
+  return jobs.length > 0 && jobs.every((job) => job.status === "skipped");
+}
+
 export function canMoveToReady(jobs: JobListItem[]): boolean {
   return jobs.length > 0 && jobs.every((job) => job.status === "discovered");
 }

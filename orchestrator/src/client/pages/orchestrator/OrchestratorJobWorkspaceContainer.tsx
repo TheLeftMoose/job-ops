@@ -92,6 +92,7 @@ export const OrchestratorJobWorkspaceContainer: React.FC<
   const {
     selectedJobIds,
     canSkipSelected,
+    canRestoreSelected,
     canMoveSelected,
     canRescoreSelected,
     jobActionInFlight,
@@ -278,10 +279,12 @@ export const OrchestratorJobWorkspaceContainer: React.FC<
         selectedCount={selectedJobIds.size}
         canMoveSelected={canMoveSelected}
         canSkipSelected={canSkipSelected}
+        canRestoreSelected={canRestoreSelected}
         canRescoreSelected={canRescoreSelected}
         jobActionInFlight={jobActionInFlight !== null}
         onMoveToReady={() => void runJobAction("move_to_ready")}
         onSkipSelected={() => void runJobAction("skip")}
+        onRestoreSelected={() => void runJobAction("restore")}
         onRescoreSelected={() => void runJobAction("rescore")}
         onClear={clearSelection}
       />

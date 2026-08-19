@@ -144,6 +144,29 @@ export async function executeJobActionForJob(
       return { jobId, ok: true, job: updated };
     }
 
+    if (action === "restore") {
+      if (job.status !== "skipped") {
+        throw badRequest(`Job is not restorable from status "${job.status}"`, {
+          jobId,
+          status: job.status,
+          requiredStatus: "skipped",
+        });
+      }
+
+      const updated = await jobsRepo.updateJob(jobId, {
+        status: "discovered",
+      });
+      if (!updated) {
+        throw new AppError({
+          status: 404,
+          code: "NOT_FOUND",
+          message: "Job not found",
+        });
+      }
+
+      return { jobId, ok: true, job: updated };
+    }
+
     if (action === "move_to_ready") {
       if (job.status !== "discovered") {
         throw badRequest(

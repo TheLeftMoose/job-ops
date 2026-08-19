@@ -85,6 +85,34 @@ export function useSkipJobMutation() {
   });
 }
 
+export function useRestoreJobMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.restoreJob(id),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.jobs.detail(id) });
+      const previousJob = queryClient.getQueryData<Job>(
+        queryKeys.jobs.detail(id),
+      );
+      queryClient.setQueryData<Job>(queryKeys.jobs.detail(id), (current) =>
+        current ? { ...current, status: "discovered" } : current,
+      );
+      return { previousJob, id };
+    },
+    onError: (_error, _id, context) => {
+      if (context?.id) {
+        queryClient.setQueryData(
+          queryKeys.jobs.detail(context.id),
+          context.previousJob,
+        );
+      }
+    },
+    onSettled: async (_data, _error, id) => {
+      await invalidateJobData(queryClient, id);
+    },
+  });
+}
+
 export function useRescoreJobMutation() {
   const queryClient = useQueryClient();
   return useMutation({

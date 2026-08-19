@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   canMoveToReady,
   canRescore,
+  canRestore,
   canSkip,
   getFailedJobIds,
 } from "./jobActions";
@@ -17,6 +18,8 @@ describe("jobActions", () => {
       ]),
     ).toBe(true);
     expect(canSkip([createJob({ id: "1", status: "applied" })])).toBe(false);
+    expect(canRestore([createJob({ id: "1", status: "skipped" })])).toBe(true);
+    expect(canRestore([createJob({ id: "1", status: "ready" })])).toBe(false);
 
     expect(
       canMoveToReady([

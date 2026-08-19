@@ -1249,6 +1249,22 @@ describe.sequential("Jobs API routes", () => {
     expect(skipBody.data.results[0].ok).toBe(true);
     expect(skipBody.data.results[0].job.status).toBe("skipped");
 
+    const restoreRes = await fetch(`${baseUrl}/api/jobs/actions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "restore", jobIds: [job.id] }),
+    });
+    const restoreBody = await restoreRes.json();
+    expect(restoreBody.data.results).toHaveLength(1);
+    expect(restoreBody.data.results[0].ok).toBe(true);
+    expect(restoreBody.data.results[0].job.status).toBe("discovered");
+
+    await fetch(`${baseUrl}/api/jobs/actions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "skip", jobIds: [job.id] }),
+    });
+
     const deleteRes = await fetch(`${baseUrl}/api/jobs/status/skipped`, {
       method: "DELETE",
     });

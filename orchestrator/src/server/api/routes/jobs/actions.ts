@@ -305,6 +305,12 @@ jobsActionsRouter.post("/:id/skip", async (req: Request, res: Response) => {
   ok(res, await hydrateJobPdfFreshness(result.job));
 });
 
+jobsActionsRouter.post("/:id/restore", async (req: Request, res: Response) => {
+  const result = await executeJobActionForJob("restore", req.params.id);
+  if (!result.ok) return fail(res, mapJobActionFailure(result));
+  ok(res, await hydrateJobPdfFreshness(result.job));
+});
+
 jobsActionsRouter.post("/:id/rescore", async (req: Request, res: Response) => {
   const result = await executeJobActionForJob(
     "rescore",

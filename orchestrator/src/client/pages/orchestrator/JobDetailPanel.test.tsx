@@ -138,6 +138,7 @@ vi.mock("@client/api", () => ({
   generateJobPdf: vi.fn(),
   markAsApplied: vi.fn(),
   skipJob: vi.fn(),
+  restoreJob: vi.fn(),
   getProfile: vi.fn().mockResolvedValue({}),
   getResumeProjectsCatalog: vi.fn().mockResolvedValue([]),
 }));
@@ -624,6 +625,30 @@ describe("JobDetailPanel", () => {
     fireEvent.click(skipItem);
 
     await waitFor(() => expect(api.skipJob).toHaveBeenCalledWith("job-1"));
+    expect(onJobUpdated).toHaveBeenCalled();
+  });
+
+  it("restores a skipped job from the menu", async () => {
+    const onJobUpdated = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(api.restoreJob).mockResolvedValue(undefined as any);
+
+    await renderJobDetailPanel({
+      activeTab: "all",
+      activeJobs: [],
+      selectedJob: createJob({ status: "skipped" }),
+      onSelectJobId: vi.fn(),
+      onJobUpdated,
+    });
+
+    fireEvent.pointerDown(
+      screen.getByRole("button", { name: /more actions/i }),
+    );
+    const restoreItem = await screen.findByRole("menuitem", {
+      name: /restore job/i,
+    });
+    fireEvent.click(restoreItem);
+
+    await waitFor(() => expect(api.restoreJob).toHaveBeenCalledWith("job-1"));
     expect(onJobUpdated).toHaveBeenCalled();
   });
 

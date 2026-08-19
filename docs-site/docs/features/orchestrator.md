@@ -223,7 +223,12 @@ curl -X POST "http://localhost:3001/api/jobs/<jobId>/generate-pdf"
 
 ### Reopen skipped/applied jobs
 
-- Patch `status` back to `discovered` to return the job to the active queue.
+- For a skipped job, open **More actions** and select **Restore job**.
+- To restore several jobs, find them in **All Jobs** with the `status:skipped`
+  search filter, select them, and choose **Restore selected**.
+- Restored jobs return to **Discovered**, where they can be reviewed or moved
+  to **Ready** again.
+- Applied jobs still require changing their status back to `discovered`.
 
 ### Date filter returns no jobs
 
