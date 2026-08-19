@@ -116,6 +116,149 @@ export const REORDERABLE_SECTION_KEYS = [
   "references",
 ];
 
+export type CustomSectionPlacement = "sidebar" | "main" | "continuation";
+
+function customSectionDefaultsToSidebar(
+  resumeJson: Record<string, unknown>,
+  sectionId: string,
+): boolean {
+  const section = asArray(resumeJson.customSections)
+    .map((item) => asRecord(item))
+    .find((item) => toText(item?.id) === sectionId);
+  return asArray(section?.items).some((item) =>
+    /<li\b/i.test(
+      toText(asRecord(item)?.content ?? asRecord(item)?.description),
+    ),
+  );
+}
+
+export function getCustomSectionPlacement(
+  resumeJson: Record<string, unknown>,
+  sectionId: string,
+): CustomSectionPlacement {
+  const metadata = asRecord(resumeJson.metadata);
+  const layout = asRecord(metadata?.layout);
+  const pages = asArray(layout?.pages);
+
+  for (const [pageIndex, page] of pages.entries()) {
+    const pageRecord = asRecord(page);
+    if (pageIndex === 0 && asArray(pageRecord?.sidebar).includes(sectionId)) {
+      return "sidebar";
+    }
+    if (pageIndex === 0 && asArray(pageRecord?.main).includes(sectionId)) {
+      return "main";
+    }
+    if (
+      pageIndex > 0 &&
+      (asArray(pageRecord?.main).includes(sectionId) ||
+        asArray(pageRecord?.sidebar).includes(sectionId))
+    ) {
+      return "continuation";
+    }
+  }
+
+  return customSectionDefaultsToSidebar(resumeJson, sectionId)
+    ? "sidebar"
+    : "continuation";
+}
+
+export function setCustomSectionPlacement(
+  resumeJson: DesignResumeDocument["resumeJson"],
+  sectionId: string,
+  placement: CustomSectionPlacement,
+): DesignResumeDocument["resumeJson"] {
+  const next = structuredClone(resumeJson);
+  if (!next.metadata) {
+    next.metadata = {} as DesignResumeDocument["resumeJson"]["metadata"];
+  }
+  if (!next.metadata.layout) {
+    next.metadata.layout = { sidebarWidth: 35, pages: [] };
+  }
+  if (!next.metadata.layout.pages) {
+    next.metadata.layout.pages = [];
+  }
+  if (!next.metadata.layout.pages[0]) {
+    next.metadata.layout.pages.push({
+      fullWidth: false,
+      main: getSectionOrder(resumeJson as Record<string, unknown>),
+      sidebar: [],
+    });
+  }
+
+  for (const page of next.metadata.layout.pages) {
+    page.main = page.main.filter((key) => key !== sectionId);
+    page.sidebar = page.sidebar.filter((key) => key !== sectionId);
+  }
+
+  if (placement === "sidebar") {
+    next.metadata.layout.pages[0]?.sidebar.push(sectionId);
+  } else if (placement === "main") {
+    const main = next.metadata.layout.pages[0]?.main ?? [];
+    const summaryIndex = main.indexOf("summary");
+    const experienceIndex = main.indexOf("experience");
+    const insertAt =
+      summaryIndex !== -1
+        ? summaryIndex + 1
+        : experienceIndex === -1
+          ? main.length
+          : experienceIndex;
+    main.splice(insertAt, 0, sectionId);
+  } else {
+    if (!next.metadata.layout.pages[1]) {
+      next.metadata.layout.pages.push({
+        fullWidth: true,
+        main: [],
+        sidebar: [],
+      });
+    }
+    next.metadata.layout.pages[1]?.main.push(sectionId);
+  }
+
+  return next;
+}
+
+export function moveCustomSectionWithinPlacement(
+  resumeJson: DesignResumeDocument["resumeJson"],
+  sectionId: string,
+  direction: -1 | 1,
+): DesignResumeDocument["resumeJson"] {
+  const next = structuredClone(resumeJson);
+  const pages = next.metadata?.layout?.pages ?? [];
+  const customIds = new Set(next.customSections.map((section) => section.id));
+
+  for (const page of pages) {
+    for (const key of ["main", "sidebar"] as const) {
+      const index = page[key].indexOf(sectionId);
+      if (index === -1) continue;
+      const customPositions = page[key]
+        .map((id, position) => (customIds.has(id) ? position : -1))
+        .filter((position) => position !== -1);
+      const customIndex = customPositions.indexOf(index);
+      const targetIndex = customPositions[customIndex + direction];
+      if (targetIndex === undefined) return next;
+      [page[key][index], page[key][targetIndex]] = [
+        page[key][targetIndex],
+        page[key][index],
+      ];
+      return next;
+    }
+  }
+
+  return next;
+}
+
+export function removeCustomSectionLayoutReferences(
+  resumeJson: DesignResumeDocument["resumeJson"],
+  sectionIds: Set<string>,
+): DesignResumeDocument["resumeJson"] {
+  const next = structuredClone(resumeJson);
+  for (const page of next.metadata?.layout?.pages ?? []) {
+    page.main = page.main.filter((key) => !sectionIds.has(key));
+    page.sidebar = page.sidebar.filter((key) => !sectionIds.has(key));
+  }
+  return next;
+}
+
 export function getSectionOrder(resumeJson: Record<string, unknown>): string[] {
   const metadata = resumeJson.metadata as Record<string, unknown> | undefined;
   const layout = metadata?.layout as Record<string, unknown> | undefined;

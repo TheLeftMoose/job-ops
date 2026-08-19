@@ -2,6 +2,7 @@ import type { ChatStyleManualLanguage } from "@shared/types";
 import type {
   LatexResumeContactItem,
   LatexResumeCustomFieldItem,
+  LatexResumeCustomSection,
   LatexResumeDocument,
   LatexResumeEntry,
   LatexResumeInterestItem,
@@ -187,6 +188,15 @@ function extractBullets(value: unknown): string[] {
     .filter(Boolean);
 }
 
+function extractTextOutsideLists(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const withoutLists = value.replace(
+    /<(?:ul|ol)\b[^>]*>[\s\S]*?<\/(?:ul|ol)>/gi,
+    " ",
+  );
+  return stripHtml(withoutLists) || null;
+}
+
 function getSectionRecord(resumeJson: RecordLike, key: string): RecordLike {
   const sections = (asRecord(resumeJson.sections) ?? {}) as RecordLike;
   return (asRecord(sections[key]) ?? {}) as RecordLike;
@@ -340,17 +350,118 @@ function buildCustomFieldItems(
 }
 
 function buildExperienceEntries(resumeJson: RecordLike): LatexResumeEntry[] {
-  return getVisibleSectionItems(resumeJson, "experience").map(
-    (item, index) => ({
-      title: toText(item.company, `Experience ${index + 1}`),
-      subtitle:
-        joinNonEmpty([toText(item.position), toText(item.location)], " / ") ||
-        null,
-      date: toText(item.period) || null,
-      bullets: extractBullets(item.description),
-      url: toText(getByPath(item, "website.url")) || undefined,
-    }),
+  return getVisibleSectionItems(resumeJson, "experience").flatMap(
+    (item, index) => {
+      const roles = asArray(item.roles)
+        .map((role) => asRecord(role) ?? {})
+        .filter((role) => toText(role.position).trim());
+      const parentBullets = extractBullets(item.description);
+
+      if (roles.length > 0) {
+        return roles.map((role, roleIndex) => ({
+          title: toText(item.company, `Experience ${index + 1}`),
+          subtitle: toText(role.position).trim() || null,
+          secondarySubtitle: toText(item.location).trim() || null,
+          date: toText(role.period ?? role.date) || null,
+          bullets: [
+            ...(roleIndex === 0 ? parentBullets : []),
+            ...extractBullets(role.description ?? role.summary),
+          ],
+          url: toText(getByPath(item, "website.url")) || undefined,
+        }));
+      }
+
+      return [
+        {
+          title: toText(item.company, `Experience ${index + 1}`),
+          subtitle: toText(item.position).trim() || null,
+          secondarySubtitle: toText(item.location).trim() || null,
+          date: toText(item.period) || null,
+          bullets: parentBullets,
+          url: toText(getByPath(item, "website.url")) || undefined,
+        },
+      ];
+    },
   );
+}
+
+function buildCustomSections(
+  resumeJson: RecordLike,
+): LatexResumeCustomSection[] {
+  return asArray(resumeJson.customSections)
+    .map((section) => asRecord(section) ?? {})
+    .filter((section) => !toBoolean(section.hidden, false))
+    .map((section, sectionIndex) => {
+      const items = asArray(section.items)
+        .map((item) => asRecord(item) ?? {})
+        .filter((item) => !toBoolean(item.hidden, false))
+        .map((item) => {
+          const content = toText(item.content ?? item.description);
+          return {
+            text: extractTextOutsideLists(content),
+            bullets: /<li\b/i.test(content) ? extractBullets(content) : [],
+          };
+        })
+        .filter((item) => item.text || item.bullets.length > 0);
+
+      return {
+        id: toText(section.id, `custom-section-${sectionIndex + 1}`),
+        title: toText(section.title, `Custom Section ${sectionIndex + 1}`),
+        type: toText(section.type, "summary"),
+        items,
+      };
+    })
+    .filter((section) => section.items.length > 0);
+}
+
+function buildCustomSectionLayout(
+  resumeJson: RecordLike,
+  customSections: LatexResumeCustomSection[],
+): { sidebar: string[]; main: string[]; continuation: string[] } {
+  const customIds = new Set(customSections.map((section) => section.id));
+  const metadata = asRecord(resumeJson.metadata);
+  const layout = asRecord(metadata?.layout);
+  const pages = asArray(layout?.pages)
+    .map((page) => asRecord(page))
+    .filter((page): page is RecordLike => Boolean(page));
+  const sidebar: string[] = [];
+  const main: string[] = [];
+  const continuation: string[] = [];
+
+  const appendUnique = (target: string[], values: unknown[]) => {
+    for (const value of values) {
+      if (
+        typeof value === "string" &&
+        customIds.has(value) &&
+        !target.includes(value)
+      ) {
+        target.push(value);
+      }
+    }
+  };
+
+  appendUnique(sidebar, asArray(pages[0]?.sidebar));
+  appendUnique(main, asArray(pages[0]?.main));
+  for (const page of pages.slice(1)) {
+    appendUnique(continuation, asArray(page.main));
+    appendUnique(continuation, asArray(page.sidebar));
+  }
+
+  for (const section of customSections) {
+    if (
+      sidebar.includes(section.id) ||
+      main.includes(section.id) ||
+      continuation.includes(section.id)
+    ) {
+      continue;
+    }
+    const target = section.items.some((item) => item.bullets.length > 0)
+      ? sidebar
+      : continuation;
+    target.push(section.id);
+  }
+
+  return { sidebar, main, continuation };
 }
 
 function buildEducationEntries(resumeJson: RecordLike): LatexResumeEntry[] {
@@ -481,6 +592,8 @@ export function normalizeResumeJsonToLatexDocument(
   const summary = (asRecord(record.summary) ?? {}) as RecordLike;
   const titles = getLatexResumeSectionTitles(options.language);
 
+  const customSections = buildCustomSections(record);
+
   return {
     name: toText(basics.name, "Your Name"),
     headline: toText(basics.headline).trim() || null,
@@ -504,6 +617,8 @@ export function normalizeResumeJsonToLatexDocument(
     publications: buildPublicationEntries(record),
     volunteer: buildVolunteerEntries(record),
     references: buildReferenceEntries(record),
+    customSections,
+    customSectionLayout: buildCustomSectionLayout(record, customSections),
     sectionOrder: getOrderedSectionKeys(record),
     sectionTitles: {
       profiles: getSectionTitle(record, "profiles", titles),

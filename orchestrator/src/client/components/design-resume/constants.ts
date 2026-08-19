@@ -4,6 +4,7 @@ import {
   Award,
   BookOpen,
   BriefcaseBusiness,
+  Columns3,
   Eye,
   FileText,
   Folder,
@@ -89,6 +90,18 @@ export const DESIGN_RESUME_PROFILE_SECTIONS: SectionWorkspaceGroup<
     description: "Extra links or short details near your contact info.",
     searchTerms: ["links", "custom", "details"],
   },
+  {
+    id: "custom-sections",
+    label: "Custom Sections",
+    description: "Add, edit, hide, reorder, or remove custom resume sections.",
+    searchTerms: ["expertise", "achievements", "about me", "custom"],
+  },
+  {
+    id: "layout",
+    label: "Layout",
+    description: "Place and order custom sections in the resume.",
+    searchTerms: ["sidebar", "custom sections", "pages", "placement", "order"],
+  },
 ];
 
 export const DESIGN_RESUME_ICON_GROUPS: DesignResumeNavGroup[] = [
@@ -133,6 +146,18 @@ export const DESIGN_RESUME_ICON_GROUPS: DesignResumeNavGroup[] = [
         label: "Custom Fields",
         description: "Extra links or short details near your contact info.",
         icon: ListPlus,
+      },
+      {
+        id: "custom-sections",
+        label: "Custom Sections",
+        description: "Manage reusable sections and their visibility.",
+        icon: ListPlus,
+      },
+      {
+        id: "layout",
+        label: "Layout",
+        description: "Choose where custom sections appear and their order.",
+        icon: Columns3,
       },
     ],
   },

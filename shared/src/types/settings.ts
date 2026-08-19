@@ -1,4 +1,5 @@
 import {
+  TYPST_THEME_DESCRIPTIONS,
   TYPST_THEME_LABELS,
   TYPST_THEME_VALUES,
 } from "../generated/typst-themes";
@@ -8,7 +9,7 @@ import type {
   LocationSearchScope,
 } from "../location-preferences";
 
-export { TYPST_THEME_LABELS, TYPST_THEME_VALUES };
+export { TYPST_THEME_DESCRIPTIONS, TYPST_THEME_LABELS, TYPST_THEME_VALUES };
 
 export interface ResumeProjectCatalogItem {
   id: string;

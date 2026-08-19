@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TYPST_THEME_VALUES, type TypstTheme } from "@shared/types";
@@ -56,6 +56,8 @@ const baseDocument: ResumeRenderDocument = {
   publications: [],
   volunteer: [],
   references: [],
+  customSections: [],
+  customSectionLayout: { sidebar: [], main: [], continuation: [] },
 };
 
 async function createTempDir(): Promise<string> {
@@ -248,6 +250,30 @@ describe("typst resume renderer", () => {
     expect(template).toContain("profile-label-matching(is-github-profile)");
     expect(template).toContain("linked-entry-label(entry");
     expect(template).toContain('link(text-of-item(entry, "url"))');
+  });
+
+  it("exposes the Blue two-column executive layout", async () => {
+    const template = await readTypstTemplate("blue");
+
+    expect(template).toContain("#let sidebar-blue");
+    expect(template).toContain("columns: (2fr, 1fr)");
+    expect(template).toContain('sidebar-section("Contact Information"');
+    expect(template).toContain("#let custom-section-layout");
+    expect(template).toContain("#let custom-sections-in-order");
+    expect(template).not.toContain("custom-section-by-title");
+    expect(template).toContain(
+      'sidebar-section(section-title("education", "Education")',
+    );
+    expect(template).not.toContain(
+      '("education", source.at("education", default: ())',
+    );
+    expect(template).toContain("spacing: if compact { 6pt }");
+    expect(template).toContain("tight: false");
+    expect(template).toContain('size: 11pt, weight: "bold", fill: dark');
+    expect(template).toContain("#let first-page-height");
+    expect(template).toContain("#let select-first-page-experience");
+    expect(template).toContain("#let build-experience-continuation");
+    expect(template).not.toContain("first-experience-count");
   });
 
   it("renders award-style sections as Typst bullet lists in clean-print-cv", async () => {
@@ -460,10 +486,7 @@ describe("typst resume renderer", () => {
         typstTheme: "compact",
       });
 
-      const stats = spawnSync("sh", ["-lc", `test -s "${outputPath}"`], {
-        stdio: "ignore",
-      });
-      expect(stats.status).toBe(0);
+      expect((await stat(outputPath)).size).toBeGreaterThan(0);
     },
   );
 
@@ -499,10 +522,76 @@ describe("typst resume renderer", () => {
         typstTheme: "clean-print-cv",
       });
 
-      const stats = spawnSync("sh", ["-lc", `test -s "${outputPath}"`], {
-        stdio: "ignore",
+      expect((await stat(outputPath)).size).toBeGreaterThan(0);
+    },
+  );
+
+  it.skipIf(!typstAvailable())(
+    "renders the Blue theme with curated sections when typst is installed",
+    async () => {
+      const tempDir = await createTempDir();
+      tempDirs.push(tempDir);
+      const outputPath = join(tempDir, "blue.pdf");
+
+      await renderTypstPdf({
+        document: {
+          ...baseDocument,
+          experience: [
+            {
+              ...baseDocument.experience[0],
+              bullets: Array.from(
+                { length: 50 },
+                (_, index) =>
+                  `Tailored achievement ${index + 1} with enough detail to exercise measured first-page continuation.`,
+              ),
+            },
+            {
+              title: "Beta",
+              subtitle: "Principal Engineer",
+              date: "2020 -- 2023",
+              bullets: ["Led platform modernization"],
+            },
+          ],
+          languages: [
+            { language: "Danish", fluency: "Native", level: 5 },
+            { language: "English", fluency: "Professional", level: 4 },
+          ],
+          customSections: [
+            {
+              id: "expertise",
+              title: "Expertise Areas",
+              type: "summary",
+              items: [
+                {
+                  text: null,
+                  bullets: ["Cloud strategy", "Platform engineering"],
+                },
+              ],
+            },
+            {
+              id: "achievements",
+              title: "Selected Achievements",
+              type: "summary",
+              items: [
+                {
+                  text: "Career highlights",
+                  bullets: ["Scaled a global cloud platform"],
+                },
+              ],
+            },
+          ],
+          customSectionLayout: {
+            sidebar: ["expertise", "achievements"],
+            main: [],
+            continuation: [],
+          },
+        },
+        outputPath,
+        jobId: "job-render-blue",
+        typstTheme: "blue",
       });
-      expect(stats.status).toBe(0);
+
+      expect((await stat(outputPath)).size).toBeGreaterThan(0);
     },
   );
 });

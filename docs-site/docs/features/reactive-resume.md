@@ -90,6 +90,32 @@ Tailored mode also provides **Maximum roles in final CV**, from 1 to 20. Relevan
 
 The selected roles and bullets are stored with the job so PDF regeneration is deterministic. The base Resume Studio or Reactive Resume document is not modified.
 
+### Custom section placement
+
+Reactive Resume v5 custom sections remain standard `customSections` entries. JobOps stores their position using the canonical `metadata.layout.pages` arrays rather than adding theme-specific fields.
+
+In **Resume Studio → Custom Sections**, you can:
+
+- add or remove sections
+- edit each section's title and rich-text content
+- hide or show a section without deleting it
+- reorder the section list
+
+In **Resume Studio → Layout**, choose where each visible custom section appears:
+
+- **Blue sidebar**: places the section in the first page's sidebar.
+- **Between Summary and Experience**: places the section in the first-page main column after Summary.
+- **Later pages**: places the section in the full-width continuation body.
+- **Up/down controls**: change the order within the selected area.
+
+When importing older documents, JobOps performs a one-time migration:
+
+- titled lists embedded in Summary become real custom sections
+- list-based custom sections default to the Blue sidebar
+- paragraph-based custom sections default between Summary and Experience
+
+The Blue Typst theme reads these section IDs in layout order. This supports sections such as **Expertise Areas**, **Selected Achievements**, and **About Me** without hard-coding their titles in the template.
+
 ## Setup and configuration
 
 ### Account requirements (important)
@@ -155,6 +181,17 @@ In **Settings → CV Generation**:
 2. For tailored mode, set **Maximum roles in final CV**.
 3. Save settings.
 4. Run full tailoring for a job to apply the new default.
+
+### 6) Place custom sections
+
+1. Open **Resume Studio**.
+2. Select **Custom Sections** to add, edit, hide, show, reorder, or remove sections.
+3. Select **Layout** in the editing rail.
+4. Assign each custom section to **Blue sidebar**, **Between Summary and Experience**, or **Later pages**.
+5. Use the arrow controls to set the order within each area.
+6. Save the resume and refresh the preview.
+
+Custom sections containing concise lists work best in the sidebar. Use the main-column option for prominent first-page content and Later pages for longer supporting sections.
 
 ## Runtime behavior
 
@@ -241,6 +278,15 @@ npm run typst-theme:validate
 The generated shared metadata powers the settings dropdowns, so theme PRs do not need hand-written UI enum changes.
 
 For package-backed themes, set `kind` to `adapted` and read the normalized resume document with `json(__RESUME_DATA_PATH__)` from the Typst entrypoint.
+
+Bundled themes include:
+
+- `classic`: balanced single-column layout
+- `compact`: denser single-column layout
+- `clean-print-cv`: package-backed print layout
+- `blue`: two-column executive first page with a pale-blue sidebar, curated highlights, and full-width continuation pages
+
+The Blue theme uses each custom section's explicit sidebar or first-page main-column placement. Legacy Expertise and Achievement lists are migrated to the sidebar automatically, while paragraph-based sections are placed between Summary and Experience. Education appears in the sidebar above Languages, matching the reference CV. Experience entries with multiple roles preserve each role's title, dates, and description under the parent company. The first page measures the final tailored content and fills its available space dynamically; remaining bullets and roles continue full width on later pages.
 
 ## Common problems
 

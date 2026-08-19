@@ -531,6 +531,13 @@ export function useDesignResumeStudio() {
           variant: "secondary",
         };
       }
+      if (sectionId === "custom-sections" || sectionId === "layout") {
+        const count = asArray(resumeJson.customSections).length;
+        return {
+          label: count === 0 ? "Empty" : `${count}`,
+          variant: count === 0 ? "secondary" : "outline",
+        };
+      }
 
       const sections = asRecord(resumeJson.sections) ?? {};
       const section = asRecord(sections[sectionId]) ?? {};

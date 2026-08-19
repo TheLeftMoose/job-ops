@@ -1,0 +1,7 @@
+{
+  "id": "blue",
+  "label": "Blue",
+  "description": "Two-column executive CV with a blue sidebar and curated highlights.",
+  "kind": "adapted",
+  "entrypoint": "main.typ"
+}

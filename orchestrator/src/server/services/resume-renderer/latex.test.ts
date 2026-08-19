@@ -49,6 +49,8 @@ const baseDocument: ResumeRenderDocument = {
   publications: [],
   volunteer: [],
   references: [],
+  customSections: [],
+  customSectionLayout: { sidebar: [], main: [], continuation: [] },
 };
 
 async function createTempDir(): Promise<string> {

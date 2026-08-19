@@ -213,6 +213,35 @@ describe("normalizeResumeJsonToLatexDocument", () => {
           ],
         },
       },
+      customSections: [
+        {
+          id: "achievements",
+          title: "Selected Achievements",
+          type: "summary",
+          hidden: false,
+          items: [
+            {
+              id: "achievement-1",
+              hidden: false,
+              content:
+                "<p>Career highlights</p><ul><li>Scaled a platform globally</li><li>Reduced cloud spend</li></ul>",
+            },
+          ],
+        },
+        {
+          id: "about-me",
+          title: "About Me",
+          type: "summary",
+          hidden: false,
+          items: [
+            {
+              id: "about-me-1",
+              hidden: false,
+              content: "<p>Enjoys mentoring and sailing.</p>",
+            },
+          ],
+        },
+      ],
     });
 
     expect(document.picture?.assetId).toBe("asset-1");
@@ -237,8 +266,176 @@ describe("normalizeResumeJsonToLatexDocument", () => {
     expect(document.publications).toHaveLength(1);
     expect(document.volunteer).toHaveLength(1);
     expect(document.references).toHaveLength(1);
+    expect(document.customSections).toEqual([
+      {
+        id: "achievements",
+        title: "Selected Achievements",
+        type: "summary",
+        items: [
+          {
+            text: "Career highlights",
+            bullets: ["Scaled a platform globally", "Reduced cloud spend"],
+          },
+        ],
+      },
+      {
+        id: "about-me",
+        title: "About Me",
+        type: "summary",
+        items: [
+          {
+            text: "Enjoys mentoring and sailing.",
+            bullets: [],
+          },
+        ],
+      },
+    ]);
+    expect(document.customSectionLayout).toEqual({
+      sidebar: ["achievements"],
+      main: [],
+      continuation: ["about-me"],
+    });
     expect(document.sectionTitles?.profiles).toBe("Links");
     expect(document.sectionTitles?.summary).toBe("About");
+  });
+
+  it("renders every nested role without shifting company or role fields", () => {
+    const document = normalizeResumeJsonToLatexDocument({
+      basics: { name: "Jane Doe" },
+      sections: {
+        experience: {
+          hidden: false,
+          items: [
+            {
+              id: "exp-1",
+              hidden: false,
+              company: "Acme",
+              position: "Cloud Leadership",
+              location: "Copenhagen",
+              period: "2020 -- 2025",
+              website: { url: "https://acme.example.com" },
+              description:
+                "<ul><li>Company-wide platform responsibility</li></ul>",
+              roles: [
+                {
+                  id: "role-1",
+                  position: "Cloud Platform Architect",
+                  period: "2020 -- 2022",
+                  description: "<ul><li>Built the first landing zone</li></ul>",
+                },
+                {
+                  id: "role-2",
+                  position: "Enterprise Cloud Architect",
+                  period: "2022 -- 2025",
+                  description:
+                    "<ul><li>Led enterprise adoption</li><li>Scaled governance</li></ul>",
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    expect(document.experience).toEqual([
+      {
+        title: "Acme",
+        subtitle: "Cloud Platform Architect",
+        secondarySubtitle: "Copenhagen",
+        date: "2020 -- 2022",
+        bullets: [
+          "Company-wide platform responsibility",
+          "Built the first landing zone",
+        ],
+        url: "https://acme.example.com",
+      },
+      {
+        title: "Acme",
+        subtitle: "Enterprise Cloud Architect",
+        secondarySubtitle: "Copenhagen",
+        date: "2022 -- 2025",
+        bullets: ["Led enterprise adoption", "Scaled governance"],
+        url: "https://acme.example.com",
+      },
+    ]);
+  });
+
+  it("uses canonical custom sections without renderer-side title inference", () => {
+    const document = normalizeResumeJsonToLatexDocument({
+      basics: { name: "Jane Doe" },
+      summary: {
+        hidden: false,
+        content: "<p>Cloud architecture leader.</p>",
+      },
+      customSections: [
+        {
+          id: "expertise",
+          title: "Expertise Areas",
+          type: "summary",
+          hidden: false,
+          items: [
+            {
+              id: "expertise-1",
+              hidden: false,
+              content: "<ul><li>Structured expertise</li></ul>",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(document.summary).toBe("Cloud architecture leader.");
+    expect(document.customSections).toEqual([
+      {
+        id: "expertise",
+        title: "Expertise Areas",
+        type: "summary",
+        items: [{ text: null, bullets: ["Structured expertise"] }],
+      },
+    ]);
+    expect(document.customSectionLayout).toEqual({
+      sidebar: ["expertise"],
+      main: [],
+      continuation: [],
+    });
+  });
+
+  it("uses explicit and Resume Studio custom section placement", () => {
+    const document = normalizeResumeJsonToLatexDocument({
+      basics: { name: "Jane Doe" },
+      customSections: [
+        {
+          id: "sidebar-note",
+          title: "Leadership",
+          type: "summary",
+          hidden: false,
+          items: [{ id: "note-1", content: "<p>Team leadership</p>" }],
+        },
+        {
+          id: "forced-later",
+          title: "Selected Achievements",
+          type: "summary",
+          hidden: false,
+          items: [{ id: "note-2", content: "<p>Major achievement</p>" }],
+        },
+      ],
+      metadata: {
+        layout: {
+          pages: [
+            {
+              main: [],
+              sidebar: ["sidebar-note"],
+            },
+          ],
+        },
+      },
+    });
+
+    expect(document.customSectionLayout).toEqual({
+      sidebar: ["sidebar-note"],
+      main: [],
+      continuation: ["forced-later"],
+    });
   });
 
   it("respects hidden sections and items", () => {

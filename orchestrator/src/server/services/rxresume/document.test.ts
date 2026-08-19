@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildDefaultReactiveResumeDocument,
   mergeReactiveResumeV5Content,
+  migrateReactiveResumeV5CustomSectionLayout,
   prepareReactiveResumeV5DocumentForExternalUse,
 } from "./document";
 import type { SectionType, V5ResumeData } from "./schema/v5";
@@ -35,6 +36,70 @@ function mergeV5Documents(
 ): V5ResumeData {
   return mergeReactiveResumeV5Content(upstream, local) as V5ResumeData;
 }
+
+describe("migrateReactiveResumeV5CustomSectionLayout", () => {
+  it("promotes titled summary lists and assigns canonical layout pages", () => {
+    const document = buildDefaultReactiveResumeDocument();
+    document.summary = {
+      ...(document.summary as Record<string, unknown>),
+      content:
+        "<p>Cloud leader.</p><p><strong>Expertise Areas:</strong></p><ul><li>Cloud governance</li><li>Platform engineering</li></ul>",
+    };
+    document.customSections = [
+      {
+        id: "achievements",
+        title: "Selected Achievements",
+        type: "summary",
+        columns: 1,
+        hidden: false,
+        items: [
+          {
+            id: "achievement-1",
+            hidden: false,
+            content: "<ul><li>Scaled a global platform</li></ul>",
+          },
+        ],
+      },
+      {
+        id: "about",
+        title: "About Me",
+        type: "summary",
+        columns: 1,
+        hidden: false,
+        items: [
+          {
+            id: "about-1",
+            hidden: false,
+            content: "<p>Enjoys mentoring and sailing.</p>",
+          },
+        ],
+      },
+    ];
+
+    const migrated = migrateReactiveResumeV5CustomSectionLayout(document);
+    const summary = migrated.summary as Record<string, unknown>;
+    const customSections = migrated.customSections as Array<
+      Record<string, unknown>
+    >;
+    const pages = (
+      migrated.metadata as {
+        layout: { pages: Array<{ main: string[]; sidebar: string[] }> };
+      }
+    ).layout.pages;
+
+    expect(summary.content).toBe("<p>Cloud leader.</p>");
+    expect(customSections.map((section) => section.title)).toEqual([
+      "Expertise Areas",
+      "Selected Achievements",
+      "About Me",
+    ]);
+    expect(pages[0].sidebar).toContain("custom-summary-expertise-areas");
+    expect(pages[0].sidebar).toContain("achievements");
+    expect(pages[0].main).not.toContain("about");
+    expect(pages[1].main).toContain("about");
+    expect(migrateReactiveResumeV5CustomSectionLayout(migrated)).toBe(migrated);
+  });
+});
 
 describe("prepareReactiveResumeV5DocumentForExternalUse", () => {
   it("wraps plain rich-text fields in HTML paragraphs for Reactive Resume", () => {

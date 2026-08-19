@@ -45,6 +45,24 @@ export interface LatexResumeInterestItem {
   keywords: string[];
 }
 
+export interface LatexResumeCustomSectionItem {
+  text?: string | null;
+  bullets: string[];
+}
+
+export interface LatexResumeCustomSection {
+  id: string;
+  title: string;
+  type: string;
+  items: LatexResumeCustomSectionItem[];
+}
+
+export interface LatexResumeCustomSectionLayout {
+  sidebar: string[];
+  main: string[];
+  continuation: string[];
+}
+
 export interface LatexResumePicture {
   url?: string | null;
   assetId?: string | null;
@@ -111,6 +129,8 @@ export interface LatexResumeDocument {
   publications: LatexResumeEntry[];
   volunteer: LatexResumeEntry[];
   references: LatexResumeEntry[];
+  customSections: LatexResumeCustomSection[];
+  customSectionLayout: LatexResumeCustomSectionLayout;
   sectionOrder?: LatexResumeOrderedSectionKey[];
   sectionTitles?: LatexResumeSectionTitles;
 }

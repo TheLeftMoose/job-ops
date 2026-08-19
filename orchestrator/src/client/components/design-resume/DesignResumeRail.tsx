@@ -13,6 +13,8 @@ import type React from "react";
 import { useMemo, useState } from "react";
 import { Accordion } from "@/components/ui/accordion";
 import { bucketCount, trackProductEvent } from "@/lib/analytics";
+import { CustomSectionLayoutSection } from "./CustomSectionLayoutSection";
+import { CustomSectionsSection } from "./CustomSectionsSection";
 import {
   BasicsCustomFieldsSection,
   BasicsSection,
@@ -31,8 +33,10 @@ import {
   asRecord,
   getOrderedDefinitions,
   getSectionOrder,
+  moveCustomSectionWithinPlacement,
   REORDERABLE_SECTION_KEYS,
   setByPath,
+  setCustomSectionPlacement,
   toBoolean,
   toText,
 } from "./utils";
@@ -500,6 +504,29 @@ export function DesignResumeRail({
             onUpdateSummary={updateSummary}
           />
         );
+      case "layout":
+        return (
+          <CustomSectionLayoutSection
+            resumeJson={draft.resumeJson}
+            onPlacementChange={(sectionId, placement) =>
+              onUpdateResumeJson((current) =>
+                setCustomSectionPlacement(current, sectionId, placement),
+              )
+            }
+            onOrderChange={(sectionId, direction) =>
+              onUpdateResumeJson((current) =>
+                moveCustomSectionWithinPlacement(current, sectionId, direction),
+              )
+            }
+          />
+        );
+      case "custom-sections":
+        return (
+          <CustomSectionsSection
+            resumeJson={draft.resumeJson}
+            onChange={(next) => onUpdateResumeJson(() => next)}
+          />
+        );
       default: {
         const definition = ITEM_DEFINITIONS.find(
           (item) => item.key === activeSectionId,
@@ -570,6 +597,39 @@ export function DesignResumeRail({
           resumeJson={draft.resumeJson}
           summary={summary}
           onUpdateSummary={updateSummary}
+        />
+      </DesignResumeSection>
+
+      <DesignResumeSection
+        value="custom-sections"
+        title="Custom sections"
+        subtitle="Add, edit, hide, reorder, or remove reusable resume sections."
+        badge={`${asArray(resumeJson.customSections).length}`}
+      >
+        <CustomSectionsSection
+          resumeJson={draft.resumeJson}
+          onChange={(next) => onUpdateResumeJson(() => next)}
+        />
+      </DesignResumeSection>
+
+      <DesignResumeSection
+        value="layout"
+        title="Custom section layout"
+        subtitle="Place and order custom sections in the sidebar, first-page body, or later pages."
+        badge={`${asArray(resumeJson.customSections).length}`}
+      >
+        <CustomSectionLayoutSection
+          resumeJson={draft.resumeJson}
+          onPlacementChange={(sectionId, placement) =>
+            onUpdateResumeJson((current) =>
+              setCustomSectionPlacement(current, sectionId, placement),
+            )
+          }
+          onOrderChange={(sectionId, direction) =>
+            onUpdateResumeJson((current) =>
+              moveCustomSectionWithinPlacement(current, sectionId, direction),
+            )
+          }
         />
       </DesignResumeSection>
 

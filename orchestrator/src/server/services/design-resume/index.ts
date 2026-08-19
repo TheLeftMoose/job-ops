@@ -12,6 +12,7 @@ import { getSetting } from "@server/repositories/settings";
 import { getOriginalEnvValue } from "@server/services/envSettings";
 import { getResume } from "@server/services/rxresume";
 import { getConfiguredRxResumeBaseResumeId } from "@server/services/rxresume/baseResumeId";
+import { migrateReactiveResumeV5CustomSectionLayout } from "@server/services/rxresume/document";
 import { getResumeSchemaValidationMessage } from "@server/services/rxresume/schema";
 import {
   parseV5ResumeData,
@@ -425,9 +426,10 @@ type DesignResumeDocumentRow = NonNullable<
   Awaited<ReturnType<typeof designResumeRepo.getLatestDesignResumeDocument>>
 >;
 
-async function persistMissingProjectIdRepair(
+async function persistStoredDocumentRepair(
   row: DesignResumeDocumentRow,
   resumeJson: DesignResumeJson,
+  repairs: string[],
 ): Promise<DesignResumeDocumentRow> {
   const nextRevision = row.revision + 1;
   const updatedAt = new Date().toISOString();
@@ -442,10 +444,11 @@ async function persistMissingProjectIdRepair(
     updatedAt,
   });
 
-  logger.info("Repaired missing Resume Studio project IDs", {
+  logger.info("Repaired stored Resume Studio document", {
     documentId: row.id,
     previousRevision: row.revision,
     nextRevision,
+    repairs,
   });
 
   return (
@@ -468,11 +471,18 @@ async function hydrateDocument(
   const validatedResumeJson = validateStoredDesignResumeDocument(
     row.resumeJson ?? {},
   );
-  const resumeJson = ensureImportedProjectIds(validatedResumeJson);
+  const withProjectIds = ensureImportedProjectIds(validatedResumeJson);
+  const resumeJson = migrateReactiveResumeV5CustomSectionLayout(
+    withProjectIds,
+  ) as DesignResumeJson;
+  const repairs = [
+    ...(withProjectIds === validatedResumeJson ? [] : ["project_ids"]),
+    ...(resumeJson === withProjectIds ? [] : ["custom_section_layout"]),
+  ];
   const documentRow =
     resumeJson === validatedResumeJson
       ? row
-      : await persistMissingProjectIdRepair(row, resumeJson);
+      : await persistStoredDocumentRepair(row, resumeJson, repairs);
   const assets = await designResumeRepo.listDesignResumeAssets(documentRow.id);
   return {
     id: documentRow.id,
@@ -661,7 +671,9 @@ function applyPatchOperation(
 function validatePatchedDocument(
   document: Record<string, unknown>,
 ): DesignResumeJson {
-  return validateIncomingDesignResumeDocument(document);
+  return validateIncomingDesignResumeDocument(
+    migrateReactiveResumeV5CustomSectionLayout(document),
+  );
 }
 
 function isMissingDesignResumeTableError(error: unknown): boolean {

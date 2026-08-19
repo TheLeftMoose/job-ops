@@ -309,6 +309,19 @@ function renderSummarySection(document: LatexResumeDocument): string {
   ].join("\n");
 }
 
+function renderCustomSections(document: LatexResumeDocument): string {
+  return document.customSections
+    .map((section) => {
+      const lines = section.items.flatMap((item) => [
+        ...(item.text ? [escapeForCommand(item.text)] : []),
+        ...item.bullets.map((bullet) => escapeForCommand(bullet)),
+      ]);
+      return renderLineSection(section.title, lines);
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
 function renderEntrySection(args: {
   title: string;
   entries: LatexResumeEntry[];
@@ -538,6 +551,7 @@ export function buildLatexDocument(
     renderSummarySection(document),
     renderCustomFieldsSection(document),
     ...renderOrderedCoreSections(document, titles),
+    renderCustomSections(document),
   ]
     .filter(Boolean)
     .join("\n");

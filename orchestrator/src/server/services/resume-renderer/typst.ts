@@ -315,6 +315,21 @@ function renderSummarySection(document: LatexResumeDocument): string {
   ].join("\n\n");
 }
 
+function renderCustomSections(document: LatexResumeDocument): string {
+  return document.customSections
+    .map((section) => {
+      const body = section.items
+        .flatMap((item) => [
+          ...(item.text ? [escapeTypstText(item.text)] : []),
+          ...item.bullets.map((bullet) => `- ${escapeTypstText(bullet)}`),
+        ])
+        .join("\n");
+      return body ? `= ${escapeTypstText(section.title)}\n\n${body}` : "";
+    })
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 function renderEntrySection(args: {
   title: string;
   entries: LatexResumeEntry[];
@@ -573,6 +588,7 @@ export function buildTypstDocument(
     renderSummarySection(document),
     renderCustomFieldsSection(document),
     ...renderOrderedCoreSections(document, titles, tokens.entryMetaSize),
+    renderCustomSections(document),
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -698,6 +714,13 @@ export function convertDocFieldsToTypst(
     publications: doc.publications.map(convertEntry),
     volunteer: doc.volunteer.map(convertEntry),
     references: doc.references.map(convertEntry),
+    customSections: doc.customSections.map((section) => ({
+      ...section,
+      items: section.items.map((item) => ({
+        text: item.text ? escapeTypstText(item.text) : null,
+        bullets: convertBullets(item.bullets),
+      })),
+    })),
   };
 }
 

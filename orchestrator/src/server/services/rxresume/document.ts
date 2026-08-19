@@ -98,18 +98,197 @@ function defaultPicture() {
   };
 }
 
-function buildDefaultPageLayout(customSections: unknown) {
-  const customIds = asArray(customSections)
-    .map((section) => asRecord(section))
-    .filter((section): section is RecordLike => Boolean(section))
-    .map((section) => toText(section.id))
-    .filter(Boolean);
-
+function buildDefaultPageLayout() {
   return {
     fullWidth: false,
     main: [...DEFAULT_MAIN_SECTIONS],
-    sidebar: [...DEFAULT_SIDEBAR_SECTIONS, ...customIds],
+    sidebar: [...DEFAULT_SIDEBAR_SECTIONS],
   };
+}
+
+function decodeHtmlText(value: string): string {
+  return value
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'");
+}
+
+function stripHtmlText(value: string): string {
+  return decodeHtmlText(value.replace(/<[^>]+>/g, " "))
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function customSectionContainsList(section: unknown): boolean {
+  const record = asRecord(section);
+  return asArray(record?.items).some((item) => {
+    const itemRecord = asRecord(item);
+    return /<li\b/i.test(
+      toText(itemRecord?.content ?? itemRecord?.description),
+    );
+  });
+}
+
+function promoteSummaryLists(
+  summaryContent: string,
+  existingSections: unknown[],
+): { content: string; promotedSections: RecordLike[] } {
+  const existingTitles = new Set(
+    existingSections
+      .map((section) => toText(asRecord(section)?.title).trim().toLowerCase())
+      .filter(Boolean),
+  );
+  const existingIds = new Set(
+    existingSections
+      .map((section) => toText(asRecord(section)?.id))
+      .filter(Boolean),
+  );
+  const promotedSections: RecordLike[] = [];
+  const content = summaryContent.replace(
+    /<p\b[^>]*>\s*<(?:strong|b)\b[^>]*>([\s\S]*?)<\/(?:strong|b)>\s*<\/p>\s*(<(?:ul|ol)\b[^>]*>[\s\S]*?<\/(?:ul|ol)>)/gi,
+    (match, rawTitle: string, listHtml: string) => {
+      const title = stripHtmlText(rawTitle).replace(/:\s*$/, "").trim();
+      if (!title || !/<li\b/i.test(listHtml)) return match;
+      if (existingTitles.has(title.toLowerCase())) return "";
+
+      const slug =
+        title
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, "") || createId();
+      let id = `custom-summary-${slug}`;
+      let suffix = 2;
+      while (existingIds.has(id)) {
+        id = `custom-summary-${slug}-${suffix}`;
+        suffix += 1;
+      }
+      existingIds.add(id);
+      existingTitles.add(title.toLowerCase());
+      promotedSections.push({
+        id,
+        title,
+        icon: "",
+        columns: 1,
+        hidden: false,
+        type: "summary",
+        items: [
+          {
+            id: `${id}-item`,
+            hidden: false,
+            content: listHtml,
+          },
+        ],
+      });
+      return "";
+    },
+  );
+
+  return { content, promotedSections };
+}
+
+export function migrateReactiveResumeV5CustomSectionLayout(
+  input: unknown,
+): RecordLike {
+  const source = asRecord(input) ?? {};
+  const summary = asRecord(source.summary) ?? {};
+  const existingSections = asArray(source.customSections);
+  const promotion = promoteSummaryLists(
+    toText(summary.content),
+    existingSections,
+  );
+  const customSections = [
+    ...promotion.promotedSections,
+    ...existingSections.map((section) => structuredClone(section)),
+  ];
+  const metadata = asRecord(source.metadata) ?? {};
+  const layout = asRecord(metadata.layout) ?? {};
+  const pages = normalizeLayoutPages(
+    layout.pages ?? metadata.layout,
+    buildDefaultPageLayout(),
+  ).map((page) => ({
+    ...page,
+    main: [...page.main],
+    sidebar: [...page.sidebar],
+  }));
+  const customIds = new Set(
+    customSections
+      .map((section) => toText(asRecord(section)?.id))
+      .filter(Boolean),
+  );
+  const sidebarIds = pages[0]?.sidebar.filter((id) => customIds.has(id)) ?? [];
+  const mainIds = pages[0]?.main.filter((id) => customIds.has(id)) ?? [];
+  const continuationIds = pages
+    .slice(1)
+    .flatMap((page) => [...page.main, ...page.sidebar])
+    .filter(
+      (id, index, values) =>
+        customIds.has(id) &&
+        !sidebarIds.includes(id) &&
+        !mainIds.includes(id) &&
+        values.indexOf(id) === index,
+    );
+  for (const section of customSections) {
+    const id = toText(asRecord(section)?.id);
+    if (
+      !id ||
+      sidebarIds.includes(id) ||
+      mainIds.includes(id) ||
+      continuationIds.includes(id)
+    ) {
+      continue;
+    }
+    if (customSectionContainsList(section)) {
+      sidebarIds.push(id);
+    } else {
+      continuationIds.push(id);
+    }
+  }
+
+  for (const page of pages) {
+    page.main = page.main.filter((id) => !customIds.has(id));
+    page.sidebar = page.sidebar.filter((id) => !customIds.has(id));
+  }
+  pages[0]?.sidebar.push(...sidebarIds);
+  if (pages[0]) {
+    const summaryIndex = pages[0].main.indexOf("summary");
+    const experienceIndex = pages[0].main.indexOf("experience");
+    const insertAt =
+      summaryIndex !== -1
+        ? summaryIndex + 1
+        : experienceIndex === -1
+          ? pages[0].main.length
+          : experienceIndex;
+    pages[0].main.splice(insertAt, 0, ...mainIds);
+  }
+  if (continuationIds.length > 0) {
+    if (!pages[1]) {
+      pages.push({ fullWidth: true, main: [], sidebar: [] });
+    }
+    pages[1]?.main.push(...continuationIds);
+  }
+
+  const migrated = {
+    ...source,
+    summary: {
+      ...summary,
+      content: promotion.content,
+    },
+    customSections,
+    metadata: {
+      ...metadata,
+      layout: {
+        ...layout,
+        pages,
+      },
+    },
+  };
+
+  return JSON.stringify(migrated) === JSON.stringify(source)
+    ? source
+    : migrated;
 }
 
 function pickTemplate(value: unknown): string {
@@ -393,7 +572,7 @@ function buildMetadata(
     fontSize: clamp(toNumber(legacyFont?.size, 10), 6, 24),
     lineHeight: clamp(toNumber(legacyTypography?.lineHeight, 1.5), 0.5, 4),
   };
-  const defaultPage = buildDefaultPageLayout(source.customSections);
+  const defaultPage = buildDefaultPageLayout();
 
   void publicBaseUrl;
 
@@ -467,7 +646,7 @@ export function normalizeReactiveResumeV5Document(
   input: unknown,
   options: { requestOrigin?: string | null } = {},
 ): RecordLike {
-  const source = asRecord(input) ?? {};
+  const source = migrateReactiveResumeV5CustomSectionLayout(input);
   const basics = asRecord(source.basics) ?? {};
   const picture = asRecord(source.picture) ?? {};
   const summary = asRecord(source.summary) ?? {};
